@@ -1,0 +1,424 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA000001 /* EventVisionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000001 /* EventVisionApp.swift */; };
+		AA000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000002 /* ContentView.swift */; };
+		AA000003 /* CaptureMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* CaptureMode.swift */; };
+		AA000004 /* ModeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000004 /* ModeSelectorView.swift */; };
+		AA000005 /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000005 /* CameraView.swift */; };
+		AA000006 /* RoomScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000006 /* RoomScanView.swift */; };
+		AA000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB000007 /* Assets.xcassets */; };
+		AA000008 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB000008 /* Preview Assets.xcassets */; };
+		AA000009 /* ManualMeasureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000011 /* ManualMeasureView.swift */; };
+		AA000010 /* MeasurementFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012 /* MeasurementFormatter.swift */; };
+		AA000013 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013 /* HomeView.swift */; };
+		AA000014 /* SavedScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014 /* SavedScan.swift */; };
+		AA000015 /* ScanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000015 /* ScanStore.swift */; };
+		AA000016 /* SavedScansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000016 /* SavedScansView.swift */; };
+		AA000017 /* ImageAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000017 /* ImageAsset.swift */; };
+		AA000018 /* AssetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000018 /* AssetStore.swift */; };
+		AA000019 /* PropNodeBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000019 /* PropNodeBuilder.swift */; };
+		AA000020 /* AssetLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000020 /* AssetLibraryView.swift */; };
+		AA000021 /* AssetPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000021 /* AssetPickerSheet.swift */; };
+		AA000022 /* InteractiveRoom3DViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000022 /* InteractiveRoom3DViewer.swift */; };
+		AA000023 /* AssetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000023 /* AssetDetailView.swift */; };
+		AA000024 /* DimensionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000024 /* DimensionSlider.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AB000001 /* EventVisionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventVisionApp.swift; sourceTree = "<group>"; };
+		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB000003 /* CaptureMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMode.swift; sourceTree = "<group>"; };
+		AB000004 /* ModeSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeSelectorView.swift; sourceTree = "<group>"; };
+		AB000005 /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
+		AB000006 /* RoomScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanView.swift; sourceTree = "<group>"; };
+		AB000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB000008 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		AB000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB000010 /* EventVision.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EventVision.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB000011 /* ManualMeasureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualMeasureView.swift; sourceTree = "<group>"; };
+		AB000012 /* MeasurementFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementFormatter.swift; sourceTree = "<group>"; };
+		AB000013 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		AB000014 /* SavedScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScan.swift; sourceTree = "<group>"; };
+		AB000015 /* ScanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanStore.swift; sourceTree = "<group>"; };
+		AB000016 /* SavedScansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScansView.swift; sourceTree = "<group>"; };
+		AB000017 /* ImageAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAsset.swift; sourceTree = "<group>"; };
+		AB000018 /* AssetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetStore.swift; sourceTree = "<group>"; };
+		AB000019 /* PropNodeBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropNodeBuilder.swift; sourceTree = "<group>"; };
+		AB000020 /* AssetLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetLibraryView.swift; sourceTree = "<group>"; };
+		AB000021 /* AssetPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetPickerSheet.swift; sourceTree = "<group>"; };
+		AB000022 /* InteractiveRoom3DViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractiveRoom3DViewer.swift; sourceTree = "<group>"; };
+		AB000023 /* AssetDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetDetailView.swift; sourceTree = "<group>"; };
+		AB000024 /* DimensionSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DimensionSlider.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AC000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AD000001 = {
+			isa = PBXGroup;
+			children = (
+				AD000002 /* EventVision */,
+				AD000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AD000002 /* EventVision */ = {
+			isa = PBXGroup;
+			children = (
+				AB000001 /* EventVisionApp.swift */,
+				AB000002 /* ContentView.swift */,
+				AD000003 /* Models */,
+				AD000004 /* Views */,
+				AB000007 /* Assets.xcassets */,
+				AB000009 /* Info.plist */,
+				AD000005 /* Preview Content */,
+			);
+			path = EventVision;
+			sourceTree = "<group>";
+		};
+		AD000003 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AB000003 /* CaptureMode.swift */,
+				AB000012 /* MeasurementFormatter.swift */,
+				AB000014 /* SavedScan.swift */,
+				AB000015 /* ScanStore.swift */,
+				AB000017 /* ImageAsset.swift */,
+				AB000018 /* AssetStore.swift */,
+				AB000019 /* PropNodeBuilder.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AD000004 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AB000004 /* ModeSelectorView.swift */,
+				AB000005 /* CameraView.swift */,
+				AB000006 /* RoomScanView.swift */,
+				AB000011 /* ManualMeasureView.swift */,
+				AB000013 /* HomeView.swift */,
+				AB000016 /* SavedScansView.swift */,
+				AB000020 /* AssetLibraryView.swift */,
+				AB000021 /* AssetPickerSheet.swift */,
+				AB000022 /* InteractiveRoom3DViewer.swift */,
+				AB000023 /* AssetDetailView.swift */,
+				AB000024 /* DimensionSlider.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AD000005 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				AB000008 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		AD000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AB000010 /* EventVision.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AE000001 /* EventVision */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AF000003 /* Build configuration list for PBXNativeTarget "EventVision" */;
+			buildPhases = (
+				AE000002 /* Sources */,
+				AC000001 /* Frameworks */,
+				AE000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EventVision;
+			productName = EventVision;
+			productReference = AB000010 /* EventVision.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AE000004 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					AE000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = AF000001 /* Build configuration list for PBXProject "EventVision" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AD000001;
+			productRefGroup = AD000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AE000001 /* EventVision */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AE000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000007 /* Assets.xcassets in Resources */,
+				AA000008 /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AE000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000001 /* EventVisionApp.swift in Sources */,
+				AA000002 /* ContentView.swift in Sources */,
+				AA000003 /* CaptureMode.swift in Sources */,
+				AA000004 /* ModeSelectorView.swift in Sources */,
+				AA000005 /* CameraView.swift in Sources */,
+				AA000006 /* RoomScanView.swift in Sources */,
+				AA000009 /* ManualMeasureView.swift in Sources */,
+				AA000010 /* MeasurementFormatter.swift in Sources */,
+				AA000013 /* HomeView.swift in Sources */,
+				AA000014 /* SavedScan.swift in Sources */,
+				AA000015 /* ScanStore.swift in Sources */,
+				AA000016 /* SavedScansView.swift in Sources */,
+				AA000017 /* ImageAsset.swift in Sources */,
+				AA000018 /* AssetStore.swift in Sources */,
+				AA000019 /* PropNodeBuilder.swift in Sources */,
+				AA000020 /* AssetLibraryView.swift in Sources */,
+				AA000021 /* AssetPickerSheet.swift in Sources */,
+				AA000022 /* InteractiveRoom3DViewer.swift in Sources */,
+				AA000023 /* AssetDetailView.swift in Sources */,
+				AA000024 /* DimensionSlider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AF000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 5YT82K795W;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AF000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 5YT82K795W;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AF000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"EventVision/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EventVision/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Event Vision";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.eventvision.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AF000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"EventVision/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EventVision/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Event Vision";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.eventvision.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AF000001 /* Build configuration list for PBXProject "EventVision" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AF000004 /* Debug */,
+				AF000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AF000003 /* Build configuration list for PBXNativeTarget "EventVision" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AF000006 /* Debug */,
+				AF000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AE000004 /* Project object */;
+}

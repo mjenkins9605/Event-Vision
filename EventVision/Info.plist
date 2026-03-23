@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Event Vision needs camera access to capture photos, videos, and scan rooms for event planning.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Event Vision needs microphone access to record video with audio.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Event Vision needs access to save captured photos and videos to your library.</string>
+</dict>
+</plist>
