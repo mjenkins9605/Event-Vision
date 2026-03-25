@@ -28,6 +28,18 @@ struct CaptureFlowView: View {
                                     .padding(.top, 8)
                             }
                         }
+                    case .arPlace:
+                        if arReady {
+                            ARPlaceView()
+                        } else {
+                            VStack {
+                                ProgressView()
+                                    .tint(.white)
+                                Text("Starting AR...")
+                                    .foregroundColor(.gray)
+                                    .padding(.top, 8)
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -56,12 +68,12 @@ struct CaptureFlowView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
         .onAppear {
-            if selectedMode == .arScan {
+            if selectedMode == .arScan || selectedMode == .arPlace {
                 arReady = true
             }
         }
         .onChange(of: selectedMode) { oldMode, newMode in
-            if newMode == .arScan {
+            if newMode == .arScan || newMode == .arPlace {
                 arReady = false
                 camera.stopSession {
                     DispatchQueue.main.async {

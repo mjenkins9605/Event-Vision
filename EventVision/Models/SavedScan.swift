@@ -29,6 +29,18 @@ struct SavedScan: Codable, Identifiable {
         self.placedProps = []
     }
 
+    /// Create a scan with only placed props (no room geometry) for AR placement sessions.
+    init(name: String, placedProps: [PlacedProp]) {
+        self.id = UUID()
+        self.name = name
+        self.date = Date()
+        self.walls = []
+        self.doors = []
+        self.windows = []
+        self.openings = []
+        self.placedProps = placedProps
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)

@@ -65,8 +65,10 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
 
     func updateUIView(_ uiView: SCNView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.syncProps(placedProps)
-        context.coordinator.updateSelection(selectedPropID)
+        if !context.coordinator.isDragging && !context.coordinator.suppressTransformSync {
+            context.coordinator.syncProps(placedProps)
+            context.coordinator.updateSelection(selectedPropID)
+        }
     }
 
     // MARK: - Build Room (reuses Room3DViewer patterns)
@@ -160,15 +162,16 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
         var scene: SCNScene?
         var propNodes: [UUID: SCNNode] = [:]
         private var selectionHighlight: SCNNode?
-        private var rotationHandleNode: SCNNode?
-        private var yRotationHandleNode: SCNNode?
+        private var gizmoNode: SCNNode?
 
         // Drag state
-        private enum DragMode { case move, rotateZ, rotateY }
+        private enum DragMode { case move, rotateAxis(simd_float3) }
         private var dragMode: DragMode = .move
         private var dragStartScreenZ: CGFloat = 0
         private var dragStartWorldPos: simd_float3 = .zero
-        private var isDragging = false
+        var isDragging = false
+        var suppressTransformSync = false
+        private var lastDragLocation: CGPoint = .zero
 
         init(parent: InteractiveRoom3DViewer) {
             self.parent = parent
@@ -181,10 +184,10 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
             guard let scnView = scnView, let selectedID = parent.selectedPropID else { return false }
 
             let location = gestureRecognizer.location(in: scnView)
-            let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.closest.rawValue])
+            let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
             for hit in hits {
-                // Allow if hitting either rotation handle
-                if hit.node.name == "rotationHandle" || hit.node.name == "yRotationHandle" { return true }
+                // Allow if hitting a rotation ring
+                if PropNodeBuilder.rotationAxis(for: hit.node) != nil { return true }
                 // Allow if hitting the selected prop directly
                 if let name = hit.node.name, let propID = UUID(uuidString: name), propID == selectedID {
                     return true
@@ -204,8 +207,28 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
 
             let location = gesture.location(in: scnView)
             let hitResults = scnView.hitTest(location, options: [
-                .searchMode: SCNHitTestSearchMode.closest.rawValue
+                .searchMode: SCNHitTestSearchMode.all.rawValue
             ])
+
+            // Check if we tapped a rotation ring — rotate 45° on that axis
+            if let selectedID = parent.selectedPropID, let node = propNodes[selectedID] {
+                for result in hitResults {
+                    if let axis = PropNodeBuilder.rotationAxis(for: result.node) {
+                        let rotAxis = rotationAxisVector(axis, transform: node.simdTransform)
+                        let rotation = simd_quatf(angle: .pi / 4, axis: simd_normalize(rotAxis))
+                        let rotMatrix = simd_float4x4(rotation)
+                        let pos = simd_float3(node.simdTransform.columns.3.x, node.simdTransform.columns.3.y, node.simdTransform.columns.3.z)
+                        var t = node.simdTransform
+                        t.columns.3 = simd_float4(0, 0, 0, 1)
+                        t = simd_mul(rotMatrix, t)
+                        t.columns.3 = simd_float4(pos, 1)
+                        node.simdTransform = t
+                        commitTransform(for: selectedID, from: node)
+                        updateSelection(selectedID)
+                        return
+                    }
+                }
+            }
 
             // Check if we tapped an existing prop
             for result in hitResults {
@@ -260,8 +283,6 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
 
         // MARK: - Pan (move prop or rotate via handle)
 
-        private var rotateStartTransform: simd_float4x4 = matrix_identity_float4x4
-
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             guard let scnView = scnView,
                   let selectedID = parent.selectedPropID,
@@ -271,17 +292,24 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
             case .began:
                 isDragging = true
                 scnView.allowsCameraControl = false
+                lastDragLocation = gesture.location(in: scnView)
 
                 // Determine what we started dragging
                 let location = gesture.location(in: scnView)
-                let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.closest.rawValue])
+                let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
 
-                if hits.contains(where: { $0.node.name == "rotationHandle" }) {
-                    dragMode = .rotateZ
-                    rotateStartTransform = node.simdTransform
-                } else if hits.contains(where: { $0.node.name == "yRotationHandle" }) {
-                    dragMode = .rotateY
-                    rotateStartTransform = node.simdTransform
+                // Check if we started dragging on a rotation ring
+                var foundRingAxis: String?
+                for hit in hits {
+                    if let axis = PropNodeBuilder.rotationAxis(for: hit.node) {
+                        foundRingAxis = axis
+                        break
+                    }
+                }
+                if let axis = foundRingAxis {
+                    let axisVec = rotationAxisVector(axis, transform: node.simdTransform)
+                    dragMode = .rotateAxis(axisVec)
+                    gizmoNode?.isHidden = true
                 } else {
                     dragMode = .move
                     let projected = scnView.projectPoint(node.position)
@@ -290,19 +318,26 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
                 }
 
             case .changed:
-                let translation = gesture.translation(in: scnView)
-
                 switch dragMode {
-                case .rotateZ:
-                    // Horizontal drag = rotation around surface normal (Z axis)
-                    let angle = Float(translation.x) * 0.01
-                    let localZ = simd_float3(rotateStartTransform.columns.2.x, rotateStartTransform.columns.2.y, rotateStartTransform.columns.2.z)
-                    applyRotation(to: node, angle: angle, axis: localZ)
+                case .rotateAxis(let axis):
+                    let currentLocation = gesture.location(in: scnView)
+                    let angle = screenDragToRotationAngle(
+                        from: lastDragLocation, to: currentLocation,
+                        nodePosition: node.simdWorldPosition,
+                        axis: axis, scnView: scnView
+                    )
+                    lastDragLocation = currentLocation
 
-                case .rotateY:
-                    // Horizontal drag = rotation around world Y axis (turntable)
-                    let angle = Float(translation.x) * 0.01
-                    applyRotation(to: node, angle: angle, axis: simd_float3(0, 1, 0))
+                    if abs(angle) > 0.0001 {
+                        let rotation = simd_quatf(angle: angle, axis: simd_normalize(axis))
+                        let rotMatrix = simd_float4x4(rotation)
+                        let pos = node.simdTransform.columns.3
+                        var t = node.simdTransform
+                        t.columns.3 = simd_float4(0, 0, 0, 1)
+                        t = simd_mul(rotMatrix, t)
+                        t.columns.3 = pos
+                        node.simdTransform = t
+                    }
 
                 case .move:
                     let location = gesture.location(in: scnView)
@@ -324,31 +359,25 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
 
             case .ended, .cancelled:
                 isDragging = false
+                suppressTransformSync = true
                 scnView.allowsCameraControl = true
+                gizmoNode?.isHidden = false
                 commitTransform(for: selectedID, from: node)
 
             default: break
             }
         }
 
-        private func applyRotation(to node: SCNNode, angle: Float, axis: simd_float3) {
-            let rotation = simd_quatf(angle: angle, axis: simd_normalize(axis))
-            let rotMatrix = simd_float4x4(rotation)
-            let pos = simd_float3(rotateStartTransform.columns.3.x, rotateStartTransform.columns.3.y, rotateStartTransform.columns.3.z)
-            var t = rotateStartTransform
-            t.columns.3 = simd_float4(0, 0, 0, 1)
-            t = simd_mul(rotMatrix, t)
-            t.columns.3 = simd_float4(pos, 1)
-            node.simdTransform = t
-        }
-
         // MARK: - Commit transform to binding
 
         private func commitTransform(for propID: UUID, from node: SCNNode) {
+            let finalTransform = node.simdTransform
             DispatchQueue.main.async {
                 if let idx = self.parent.placedProps.firstIndex(where: { $0.id == propID }) {
-                    self.parent.placedProps[idx].transform = CodableMatrix4x4(node.simdTransform)
+                    self.parent.placedProps[idx].transform = CodableMatrix4x4(finalTransform)
                 }
+                // Allow sync again after binding is updated
+                self.suppressTransformSync = false
             }
         }
 
@@ -390,8 +419,11 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
                         }
                     }
 
-                    // Sync transform (e.g. after commit from gesture)
-                    existingNode.simdTransform = prop.transform.matrix
+                    // Sync transform — skip if we just finished a gesture
+                    // to avoid snapping back to stale binding data
+                    if !suppressTransformSync {
+                        existingNode.simdTransform = prop.transform.matrix
+                    }
                 }
             }
 
@@ -409,10 +441,8 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
         func updateSelection(_ selectedID: UUID?) {
             selectionHighlight?.removeFromParentNode()
             selectionHighlight = nil
-            rotationHandleNode?.removeFromParentNode()
-            rotationHandleNode = nil
-            yRotationHandleNode?.removeFromParentNode()
-            yRotationHandleNode = nil
+            gizmoNode?.removeFromParentNode()
+            gizmoNode = nil
 
             guard let selectedID = selectedID,
                   let node = propNodes[selectedID] else { return }
@@ -442,56 +472,55 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
             node.addChildNode(highlightNode)
             selectionHighlight = highlightNode
 
-            // Rotation handle — circular arrow icon to the right of the prop
-            let handleImage = renderRotationHandleImage()
-            let handleSize: CGFloat = max(0.15, faceHeight * 0.35)
-            let handlePlane = SCNPlane(width: handleSize, height: handleSize)
-            let handleMat = SCNMaterial()
-            handleMat.diffuse.contents = handleImage
-            handleMat.lightingModel = .constant
-            handleMat.isDoubleSided = true
-            handlePlane.materials = [handleMat]
-
-            let handle = SCNNode(geometry: handlePlane)
-            handle.name = "rotationHandle"
-            handle.position = SCNVector3(Float(faceWidth / 2) + Float(handleSize / 2) + 0.04, 0, 0.01)
-            handle.constraints = [SCNBillboardConstraint()]
-            node.addChildNode(handle)
-            rotationHandleNode = handle
-
-            // Y-axis rotation handle — below the prop, orange
-            let yHandleImage = renderRotationHandleImage(color: .systemOrange, symbolName: "arrow.trianglehead.left.and.right.rotation")
-            let yHandlePlane = SCNPlane(width: handleSize, height: handleSize)
-            let yHandleMat = SCNMaterial()
-            yHandleMat.diffuse.contents = yHandleImage
-            yHandleMat.lightingModel = .constant
-            yHandleMat.isDoubleSided = true
-            yHandlePlane.materials = [yHandleMat]
-
-            let yHandle = SCNNode(geometry: yHandlePlane)
-            yHandle.name = "yRotationHandle"
-            yHandle.position = SCNVector3(0, -Float(faceHeight / 2) - Float(handleSize / 2) - 0.04, 0.01)
-            yHandle.constraints = [SCNBillboardConstraint()]
-            node.addChildNode(yHandle)
-            yRotationHandleNode = yHandle
+            // 3-axis rotation rings
+            let gizmo = PropNodeBuilder.makeRotationGizmo(faceWidth: faceWidth, faceHeight: faceHeight)
+            node.addChildNode(gizmo)
+            gizmoNode = gizmo
         }
 
-        private func renderRotationHandleImage(color: UIColor = .systemBlue, symbolName: String = "arrow.trianglehead.2.clockwise.rotate.90") -> UIImage {
-            let size = CGSize(width: 80, height: 80)
-            let renderer = UIGraphicsImageRenderer(size: size)
-            return renderer.image { ctx in
-                let rect = CGRect(origin: .zero, size: size)
-                color.withAlphaComponent(0.85).setFill()
-                UIBezierPath(ovalIn: rect.insetBy(dx: 4, dy: 4)).fill()
-
-                let config = UIImage.SymbolConfiguration(pointSize: 36, weight: .bold)
-                if let symbol = UIImage(systemName: symbolName, withConfiguration: config) {
-                    let tinted = symbol.withTintColor(.white, renderingMode: .alwaysOriginal)
-                    let symbolSize = tinted.size
-                    let origin = CGPoint(x: (size.width - symbolSize.width) / 2, y: (size.height - symbolSize.height) / 2)
-                    tinted.draw(at: origin)
-                }
+        /// Maps axis name ("X", "Y", "Z") to the actual world-space axis vector for the given prop transform.
+        private func rotationAxisVector(_ axis: String, transform: simd_float4x4) -> simd_float3 {
+            switch axis {
+            case "X":
+                return simd_float3(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z)
+            case "Y":
+                return simd_float3(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z)
+            case "Z":
+                return simd_float3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)
+            default:
+                return simd_float3(0, 1, 0)
             }
+        }
+
+        /// Converts a screen-space drag into a rotation angle that feels natural.
+        /// Projects the rotation axis to screen space, then uses the perpendicular
+        /// component of the drag to determine rotation magnitude and direction.
+        private func screenDragToRotationAngle(
+            from startPt: CGPoint, to endPt: CGPoint,
+            nodePosition: simd_float3, axis: simd_float3,
+            scnView: SCNView
+        ) -> Float {
+            // Project the node center and a point along the axis to screen space
+            let center3D = SCNVector3(nodePosition.x, nodePosition.y, nodePosition.z)
+            let axisEnd3D = SCNVector3(nodePosition.x + axis.x, nodePosition.y + axis.y, nodePosition.z + axis.z)
+            let centerScreen = scnView.projectPoint(center3D)
+            let axisEndScreen = scnView.projectPoint(axisEnd3D)
+
+            // Screen-space axis direction
+            let axisScreenDir = CGPoint(x: CGFloat(axisEndScreen.x - centerScreen.x),
+                                         y: CGFloat(axisEndScreen.y - centerScreen.y))
+
+            // Drag vector
+            let dragDx = endPt.x - startPt.x
+            let dragDy = endPt.y - startPt.y
+
+            // Cross product (2D) of axis direction with drag direction gives signed rotation
+            let cross = axisScreenDir.x * dragDy - axisScreenDir.y * dragDx
+
+            // Scale: total drag magnitude gives speed, cross sign gives direction
+            let dragMag = sqrt(dragDx * dragDx + dragDy * dragDy)
+            let sign: Float = cross > 0 ? 1.0 : -1.0
+            return sign * Float(dragMag) * 0.005
         }
 
         private func findAsset(_ assetID: UUID) -> ImageAsset {

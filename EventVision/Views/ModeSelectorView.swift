@@ -4,7 +4,7 @@ struct ModeSelectorView: View {
     @Binding var selectedMode: CaptureMode
 
     var body: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: 16) {
             ForEach(CaptureMode.allCases, id: \.self) { mode in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {

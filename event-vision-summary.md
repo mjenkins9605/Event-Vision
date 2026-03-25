@@ -1,6 +1,6 @@
 # Event Vision - Project Summary
 
-**Last updated:** March 22, 2026 (Session 4)
+**Last updated:** March 24, 2026 (Session 5)
 **Platform:** iOS (Swift / SwiftUI)
 **Xcode:** 26.3
 **Tested on:** iPhone 16 (no LiDAR), iPhone 14 Pro Max (LiDAR)
@@ -36,25 +36,27 @@ Event-Vision/
     ContentView.swift                 - CaptureFlowView (camera/AR flow, pushed from home)
     Info.plist                        - Camera, microphone, photo library permissions
     Models/
-      CaptureMode.swift               - Enum: .arScan, .photo, .video (AR first)
+      CaptureMode.swift               - Enum: .arScan, .photo, .video, .arPlace
       MeasurementFormatter.swift      - Shared feet/inches formatting + conversion helpers
       SavedScan.swift                 - Codable model for persisted scans + CodableMatrix4x4
       ScanStore.swift                 - JSON + USDZ file persistence for saved scans
       ImageAsset.swift                - ImageAsset, PlacedProp, VendorQuote, AssetPreset models
       AssetStore.swift                - Image library + preset persistence (JPEG + JSON manifests)
-      PropNodeBuilder.swift           - SCNNode creation (flat plane or 3D box), labels, footprints
+      PropNodeBuilder.swift           - SCNNode creation, labels, footprints, rotation gizmo rings
     Views/
       HomeView.swift                  - Home page with marquee title + navigation cards
-      ModeSelectorView.swift          - Bottom tab bar for switching between AR Scan/Photo/Video
+      ModeSelectorView.swift          - Bottom tab bar for switching between AR Scan/Photo/Video/AR Place
       CameraView.swift                - Camera preview + photo capture + video recording + save
       ManualMeasureView.swift         - ARKit manual measurement for non-LiDAR devices
       RoomScanView.swift              - LiDAR scanning + 3D viewer + USDZ viewer + save scan flow
-      SavedScansView.swift            - Saved scans list, detail, prop placement + move/rotate
+      SavedScansView.swift            - Saved scans list, detail, prop placement + move/rotate + AR View
       AssetLibraryView.swift          - Image asset library (import, grid, tap to detail)
       AssetPickerSheet.swift          - Compact asset picker with presets + info button
       AssetDetailView.swift           - Asset detail/edit: vendor info, quotes, W x H x D dimensions
       DimensionSlider.swift           - Reusable slider + manual feet/inches input component
       InteractiveRoom3DViewer.swift   - Placement-enabled 3D viewer with move, rotate, tap-to-place
+      ARPlaceView.swift               - Live AR placement SwiftUI host (controls, save flow)
+      ARPlaceSceneView.swift          - Live AR placement UIViewRepresentable + Coordinator
     Assets.xcassets/
     Preview Content/
 ```
@@ -67,16 +69,17 @@ Event-Vision/
 - Marquee-style "EVENT VISION" title with twinkling light bulbs around each word
 - "Event &amp; Premiere Planning" subtitle
 - Three navigation cards:
-  - **New Capture** &mdash; pushes to `CaptureFlowView` (AR/Photo/Video)
+  - **New Capture** &mdash; pushes to `CaptureFlowView` (AR Scan/Photo/Video/AR Place)
   - **Saved Scans** &mdash; pushes to `SavedScansView` (list of persisted scans)
   - **Asset Library** &mdash; pushes to `AssetLibraryView` (event image management)
 - Camera does NOT open on app launch &mdash; user must tap into it
 
 ### Capture Flow (`CaptureFlowView`, formerly `ContentView`)
 - Default mode is **AR Scan** (not photo)
-- Mode selector at bottom: AR Scan | Photo | Video
+- Mode selector at bottom: AR Scan | Photo | Video | AR Place
 - Custom back button ("Home") stops camera session before dismissing
 - Camera session and AR session handoff managed via completion handler + 0.3s delay
+- Both `.arScan` and `.arPlace` modes tear down the camera session before starting AR
 
 ### LiDAR Scan Flow (`LiDARScanView`)
 1. User taps "Start Scan"
@@ -87,9 +90,40 @@ Event-Vision/
    - Row 1: "3D Measured" / "RoomPlan View" toggle | "List" (surface sheet)
    - Row 2: "Save" (name prompt) | "Rescan"
 
+### Live AR Prop Placement (`ARPlaceView` + `ARPlaceSceneView`)
+**Two entry points:**
+1. **New Capture &rarr; AR Place tab** &mdash; 4th mode in the bottom tab bar
+2. **Saved Scans &rarr; tap a scan &rarr; AR View** &mdash; loads existing placed props into the AR scene
+
+**Flow:**
+1. AR session starts with horizontal + vertical plane detection
+2. Select an asset via "Asset" button &rarr; asset picker sheet
+3. **Ghost preview** (translucent prop) follows screen center via per-frame ARKit raycasts
+4. Tap a detected surface to place the prop
+5. On **horizontal surfaces** (floor/table): prop stands upright facing the camera (uses synthetic horizontal normal toward camera instead of the floor&rsquo;s up normal)
+6. On **vertical surfaces** (walls): prop places flush against the wall
+7. If the asset has no physical dimensions set, the **Size sheet auto-opens** after placement so the user can dial in W/H/D immediately
+8. Tap an existing prop to select it &rarr; 3-axis rotation rings appear
+9. **Save Layout** button &rarr; name prompt &rarr; saves as `SavedScan` with empty room geometry and placed props only
+
+**Compact controls (two rows):**
+- Top row (when prop selected): Size | Copy | Delete | Preset
+- Bottom row: Asset | Save Layout
+- All buttons use `.caption` font with `.lineLimit(1)` and `.fixedSize()` to prevent text wrapping
+- Size opens a half-sheet with W/H/D `DimensionSlider` components
+
+**AR Scene Coordinator (`ARPlaceSceneView.Coordinator`):**
+- Conforms to `ARSCNViewDelegate`, `ARSessionDelegate`, `UIGestureRecognizerDelegate`
+- Ghost preview: per-frame raycast from screen center, translucent (0.4 opacity) prop node
+- Tap to place: ARKit raycast &rarr; `PropNodeBuilder.surfaceAlignedTransform` (or `uprightTransform` for horizontal surfaces) &rarr; `PlacedProp` &rarr; `PropNodeBuilder.makeNode`
+- Select / Move / Rotate: same patterns as `InteractiveRoom3DViewer` coordinator
+- AR session paused during drag gestures, resumed on end
+- `suppressTransformSync` flag prevents stale binding data from snapping props back after gesture ends
+
 ### Scan Persistence
 - **Save:** After scan, tap green "Save" button &rarr; alert prompts for name &rarr; saved as JSON in `Documents/EventVision/Scans/{uuid}.json` **+ USDZ export** at `{uuid}.usdz`
-- **USDZ export:** `CapturedRoom.export(to:)` is called automatically on every save &mdash; preserves full RoomPlan model including detected furniture (tables, chairs)
+- **AR-only saves:** `SavedScan(name:placedProps:)` creates a scan with empty surface arrays and just placed props (no room geometry, no USDZ)
+- **USDZ export:** `CapturedRoom.export(to:)` is called automatically on every LiDAR scan save &mdash; preserves full RoomPlan model including detected furniture (tables, chairs)
 - **View:** Home &rarr; Saved Scans &rarr; tap scan &rarr; 3D viewer with measurements
 - **Delete:** Two-step: tap "Delete" &rarr; confirmation alert ("Are you sure?") &mdash; deletes both JSON and USDZ files
 - **Data stored:** All surface dimensions + full `simd_float4x4` transforms for walls, doors, windows, openings, placed props, and USDZ 3D model
@@ -97,7 +131,8 @@ Event-Vision/
 ### Saved Scan Detail View (`SavedScanDetailView`)
 - **RoomPlan View / 3D Measured toggle** &mdash; switches between USDZ model (with furniture, rotate/zoom) and measured view with dimension labels. Only appears if `.usdz` file exists for the scan.
 - **List** button &mdash; opens measurements sheet
-- **Place Props** &mdash; navigates to prop placement
+- **Place Props** &mdash; navigates to offline 3D prop placement
+- **AR View** &mdash; navigates to live AR placement with scan&rsquo;s props pre-loaded
 - **Delete** &mdash; with confirmation
 
 ### Prop Placement (Offline 3D)
@@ -106,10 +141,13 @@ Event-Vision/
 3. Tap any wall/surface in the 3D viewer &rarr; prop appears flush against it, **always facing the camera** (normal auto-flipped if needed)
 4. Tap "Done" in the status bar to **stop placement mode** &mdash; further taps won&rsquo;t add more props
 5. Tap "Choose Asset" again to re-enter placement mode and add more
-6. Tap an existing prop &rarr; yellow highlight + **rotation handles** appear &rarr; controls:
-   - **Drag the prop** (one finger) &mdash; moves it in 3D space
-   - **Blue rotation handle** (right side) &mdash; drag to spin on the wall (Z-axis rotation around surface normal)
-   - **Orange rotation handle** (below) &mdash; drag to turntable-rotate around Y-axis (face a different wall)
+6. Tap an existing prop &rarr; yellow highlight + **3-axis rotation rings** appear &rarr; controls:
+   - **Tap a ring** &mdash; rotates 45&deg; on that axis
+   - **Drag along a ring** &mdash; continuous rotation with correct screen-space direction
+   - **Red ring** (X-axis) &mdash; pitch rotation
+   - **Green ring** (Y-axis) &mdash; yaw/turntable rotation
+   - **Blue ring** (Z-axis) &mdash; roll/spin on wall
+   - **Drag the prop body** (one finger) &mdash; moves it in 3D space
    - **W/H/D sliders** with manual feet/inches input (tap the label to type exact values)
    - **Duplicate** button &mdash; copies the prop offset to the right
    - **Remove** button &mdash; deletes the selected prop
@@ -200,6 +238,7 @@ Event-Vision/
 - `SavedSurface`: dimensions (x,y,z) + transform via `CodableMatrix4x4`
 - `CodableMatrix4x4`: wraps `simd_float4x4` as `[[Float]]` for JSON serialization
 - Backward-compatible decoding: `placedProps` defaults to `[]`, `depthMeters` defaults to `0`
+- **New `init(name:placedProps:)` initializer** for AR-only placement sessions (empty surface arrays)
 
 ---
 
@@ -211,8 +250,8 @@ Event-Vision/
 
 ### ContentView.swift (CaptureFlowView)
 - Owns the `CameraManager` as a `@StateObject`
-- Switches between `CameraView` (photo/video) and `RoomScanView` (AR)
-- Waits for camera session to fully stop before allowing AR mode (prevents freeze)
+- Switches between `CameraView` (photo/video), `RoomScanView` (AR scan), and `ARPlaceView` (AR place)
+- Waits for camera session to fully stop before allowing AR modes (prevents freeze)
 - Shows "Starting AR..." spinner during transition
 - Default mode: `.arScan`
 
@@ -238,6 +277,26 @@ Event-Vision/
 - `USDZRoomViewer` for loading and displaying exported `.usdz` files with full camera controls
 - Post-scan buttons in 2&times;2 grid layout
 
+### ARPlaceView.swift (Live AR Placement &mdash; SwiftUI Host)
+- Hosts `ARPlaceSceneView` (the AR rendering layer)
+- Manages all SwiftUI state: `placedProps`, `selectedPropID`, `selectedAsset`, `presetWidth/Height`, `showAssetPicker`, `showDimensions`, `showSaveAlert`, `trackingStatus`
+- Accepts `initialProps: [PlacedProp]` for loading existing props from saved scans
+- Compact two-row button layout using `arPillButton` helper with `.lineLimit(1)` + `.fixedSize()`
+- Size sheet (`.presentationDetents([.medium])`) with W/H/D `DimensionSlider` components
+- Auto-opens Size sheet when placing an asset without physical dimensions
+- Save flow: name prompt &rarr; `SavedScan(name:placedProps:)` &rarr; `scanStore.save(scan)`
+
+### ARPlaceSceneView.swift (Live AR Placement &mdash; UIViewRepresentable)
+- `UIViewRepresentable` wrapping `ARSCNView`
+- AR session: `ARWorldTrackingConfiguration` with horizontal + vertical plane detection, optional `.sceneDepth`
+- **Ghost preview:** Per-frame raycast from screen center &rarr; translucent prop at aim point
+- **Tap to place:** ARKit raycast &rarr; horizontal surface detection (dot product > 0.7 with up vector) &rarr; `uprightTransform` (facing camera) or `surfaceAlignedTransform` (flush against wall)
+- **Coordinator** conforms to `ARSCNViewDelegate`, `ARSessionDelegate`, `UIGestureRecognizerDelegate`
+- **Gesture handling:** Same patterns as `InteractiveRoom3DViewer` &mdash; tap for select/place/rotate-45&deg;, pan for move/drag-rotate
+- **Transform sync guards:** `isDragging` and `suppressTransformSync` flags prevent `updateUIView` from overwriting gesture-driven transforms with stale binding data
+- **Plane visualization:** Translucent cyan planes on detected surfaces
+- `uprightTransform(at:cameraTransform:)` &mdash; places props standing upright on horizontal surfaces facing camera via `surfaceAlignedTransform` with a synthetic horizontal normal
+
 ### MeasurementFormatter.swift
 - `feetInches(_ meters:)` &mdash; converts meters to `"7'3""` format
 - `toFeetInches(_ meters:)` &mdash; splits meters into (feet, inches) tuple
@@ -246,6 +305,7 @@ Event-Vision/
 ### SavedScan.swift
 - `SavedScan`, `SavedSurface`, `CodableMatrix4x4` models
 - Backward-compatible decoding for all evolving fields
+- **`init(name:placedProps:)` for AR-only saves** (no room geometry)
 
 ### ScanStore.swift
 - JSON file-based storage: one `.json` file per scan in `Documents/EventVision/Scans/`
@@ -276,22 +336,28 @@ Event-Vision/
 - `makePropLabel` &mdash; floating billboard label showing `"Asset Name &mdash; W &times; H &times; D"`
 - `surfaceAlignedTransform` &mdash; orients props flush against walls
 - `makeImageLabel` / `renderLabelImage` &mdash; shared label rendering (used for room measurements too)
+- **`makeRotationGizmo(faceWidth:faceHeight:)`** &mdash; builds 3 color-coded SCNTorus rings (X=red, Y=green, Z=blue) with:
+  - Visible thin ring (0.008 pipe radius) for aesthetics
+  - Invisible fat ring (0.04 pipe radius) for easy hit testing
+  - 4 arrow indicator billboards per ring at 90&deg; intervals
+- **`rotationAxis(for:)`** &mdash; walks up node hierarchy to identify which ring axis was hit
 
 ### InteractiveRoom3DViewer.swift
 - `UIViewRepresentable` with `Coordinator` (conforms to `UIGestureRecognizerDelegate`)
-- **Tap gesture:** select existing props or place new ones on surfaces
+- **Tap gesture:** select existing props, place new ones on surfaces, or tap a rotation ring for 45&deg; rotation
 - **Pan gesture:** context-sensitive based on what was tapped:
   - Drag on prop body &rarr; **move** (projects screen delta to world space via `projectPoint`/`unprojectPoint`)
-  - Drag on blue handle &rarr; **Z-axis rotation** (spin on wall, around surface normal)
-  - Drag on orange handle &rarr; **Y-axis rotation** (turntable spin to face different direction)
+  - Drag on a rotation ring &rarr; **axis rotation** using `screenDragToRotationAngle` for correct direction
   - Camera control temporarily disabled during drag to prevent conflicts
+- **Rotation rings:** 3-axis gizmo (red=X, green=Y, blue=Z) replaces the old blue/orange handle buttons
 - **Placement:** Normal is auto-flipped to face camera using `simd_dot` check against camera position
-- **Rotation handles:** Blue circle (right of prop) for Z-rotation, orange circle (below prop) for Y-rotation &mdash; rendered as billboard-constrained SCNPlanes with SF Symbol icons
-- `syncProps` diffs `propNodes` dict against `placedProps` binding &mdash; handles add, remove, size updates, and transform sync. Skips sync while dragging to prevent feedback loops.
-- `updateSelection` draws yellow highlight + both rotation handles, reads dimensions from box or plane child nodes
-- `commitTransform` writes updated `simd_float4x4` back to `placedProps` binding after gesture ends
+- **Hit test mode:** `.all` (not `.closest`) so rings behind prop faces are still detected
+- **Transform sync guards:** `isDragging` and `suppressTransformSync` prevent `updateUIView` from overwriting gesture-driven transforms
+- `screenDragToRotationAngle` &mdash; projects rotation axis to screen space, uses 2D cross product with drag vector for intuitive rotation direction
+- `syncProps` diffs `propNodes` dict against `placedProps` binding &mdash; handles add, remove, size updates, and guarded transform sync
+- `updateSelection` draws yellow highlight + rotation gizmo
+- `commitTransform` captures final transform, writes to binding async, clears suppress flag after write
 - Placement uses priority chain: preset dims > asset physical dims > 0.5m fallback
-- `presetWidth`/`presetHeight` properties for preset dimension pass-through
 
 ### SavedScansView.swift
 - `PropPlacementView` &mdash; full placement UI with:
@@ -303,7 +369,7 @@ Event-Vision/
   - Save as Preset button (appears when size differs from all known presets/defaults)
   - Auto-saves on disappear
 - `SavedScansView` &mdash; list of saved scans
-- `SavedScanDetailView` &mdash; RoomPlan View / 3D Measured toggle + Place Props / List / Delete
+- `SavedScanDetailView` &mdash; RoomPlan View / 3D Measured toggle + **Place Props** + **AR View** + List + Delete
 - `SavedScanMeasurementsSheet` &mdash; full surface dimensions list
 
 ### AssetLibraryView.swift
@@ -374,18 +440,42 @@ Event-Vision/
 6. **USDZ cleanup on delete:** Both `.json` and `.usdz` files are removed when deleting a scan.
 7. **Post-scan 2&times;2 button grid:** After completing a LiDAR scan, the four buttons (RoomPlan View, List, Save, Rescan) are arranged in a 2&times;2 grid instead of a horizontal row for better readability.
 8. **Prop move (drag):** One-finger drag on a selected prop moves it in 3D space. Uses `projectPoint`/`unprojectPoint` to map screen movement to world coordinates at the correct depth. Camera control temporarily disabled during drag.
-9. **Prop rotation handles:** Two visual rotation handles appear when a prop is selected:
-   - **Blue handle** (right side of prop) &mdash; drag horizontally to rotate around the surface normal (Z-axis, spin on wall)
-   - **Orange handle** (below prop) &mdash; drag horizontally to turntable-rotate around world Y-axis (face a different direction)
-   - Handles are rendered as billboard-constrained SCNPlanes with SF Symbol icons on blue/orange circle backgrounds
-   - Single-finger drag on either handle &mdash; much easier than the previous two-finger rotation gesture which was removed
+9. **Prop rotation handles:** Two visual rotation handles appear when a prop is selected (blue Z-axis, orange Y-axis). Single-finger drag on either handle.
 10. **Auto-face camera on placement:** When placing a prop, the surface normal is checked with `simd_dot` against the camera direction. If the normal points away from the camera (into the wall), it&rsquo;s flipped so the prop always faces the user on initial placement.
 11. **Room3DViewer `showMeasurements` toggle:** `Room3DViewer` now accepts a `showMeasurements` parameter. Edge lines are tagged as `"measurementEdge"` and labels as `"measurementLabel"` &mdash; `updateUIView` toggles their `isHidden` property for instant show/hide without rebuilding the scene.
+
+## Features Added (Session 5 &mdash; March 24)
+
+1. **Live AR prop placement (`ARPlaceView` + `ARPlaceSceneView`):** Full live AR placement experience with ghost preview, tap-to-place, select/move/rotate, and save-as-scan flow. Two entry points: 4th tab in capture flow ("AR Place") and "AR View" button on saved scan detail.
+2. **4th capture mode (`.arPlace`):** Added to `CaptureMode` enum with `"arkit"` SF Symbol. Mode selector spacing tightened from 24 to 16 for 4 tabs.
+3. **`SavedScan.init(name:placedProps:)`:** Convenience initializer for AR-only placement sessions (empty surface arrays, no room geometry).
+4. **"AR View" button on saved scans:** `SavedScanDetailView` now has a purple "AR View" `NavigationLink` that opens `ARPlaceView` with the scan&rsquo;s existing props pre-loaded.
+5. **3-axis rotation gizmo rings:** Replaced the old blue/orange rotation handle buttons (in both offline and AR modes) with 3 color-coded SCNTorus rings:
+   - Red (X-axis pitch), Green (Y-axis yaw), Blue (Z-axis roll)
+   - Tap a ring = 45&deg; rotation, drag = continuous rotation
+   - Each ring has a visible thin torus + invisible fat torus (0.04 pipe radius) for easy hit testing
+   - 4 arrow indicator billboards per ring at 90&deg; intervals
+   - Hit test mode changed from `.closest` to `.all` so rings behind prop faces are detected
+6. **Screen-space rotation direction:** `screenDragToRotationAngle` projects the rotation axis to screen space and uses 2D cross product with drag vector to determine intuitive rotation sign &mdash; dragging "around" the axis always rotates the expected direction regardless of camera angle.
+7. **Incremental rotation:** Drag rotation uses per-frame deltas (`lastDragLocation`) instead of cumulative translation, preventing floating-point drift and jumps.
+8. **Gizmo hidden during drag:** Rings hide on drag start and show on drag end to prevent hit-test interference during gestures.
+9. **Transform sync guards:** `isDragging` + `suppressTransformSync` flags in both coordinators prevent `updateUIView`/`syncProps` from overwriting gesture-driven node transforms with stale SwiftUI binding data. `suppressTransformSync` stays true through the async `commitTransform` gap.
+10. **Compact AR controls:** Two-row button layout with `.caption` font, `.lineLimit(1)`, `.fixedSize()`. Dimension sliders moved to a half-sheet ("Size" button) instead of inline.
+11. **Auto-open Size sheet:** When placing a prop whose asset has no physical dimensions set (and no preset selected), the Size sheet auto-opens so the user can set W/H/D immediately.
+12. **Upright placement on horizontal surfaces:** Props placed on floors/tables stand upright facing the camera instead of laying flat. Detects horizontal surfaces via `dot(normal, up) > 0.7` and uses `uprightTransform` which passes a synthetic horizontal normal (toward camera) to `surfaceAlignedTransform`.
 
 ## Fixes Applied (Session 4 &mdash; March 22)
 
 1. **SCNBox front face material:** Changed from index 4 to index 0 in both `makeNode` and `updateNodeSize` in `PropNodeBuilder.swift`
 2. **`Room3DViewer` init missing parameter:** Custom `init(scan:)` didn&rsquo;t include `showMeasurements`, causing build failure. Added `showMeasurements: Bool = true` parameter to the saved-scan initializer.
+
+## Fixes Applied (Session 5 &mdash; March 24)
+
+1. **Rotation ring hit detection:** Changed SceneKit hit test from `.closest` to `.all` search mode so rotation rings behind prop faces are found.
+2. **Props jumping during/after gestures:** Added `suppressTransformSync` flag that stays active through the async `commitTransform` gap, preventing stale binding data from snapping nodes back.
+3. **Rotation direction:** Replaced `translation.x * 0.01` (always same sign) with `screenDragToRotationAngle` using projected axis cross product for intuitive direction from any camera angle.
+4. **Props laying flat on horizontal surfaces:** `extractNormal` returned `(0,1,0)` for floors, causing `surfaceAlignedTransform` to orient the prop face-up. Fixed with `uprightTransform` using synthetic horizontal normal. Detection uses dot product threshold (> 0.7) instead of `ARPlaneAnchor.alignment` check (which failed for estimated planes with nil anchors).
+5. **Horizontal surface detection for estimated planes:** `isHorizontal` check was `(result.anchor as? ARPlaneAnchor)?.alignment == .horizontal` which returned false for estimated planes (nil anchor). Changed to normal direction check: `abs(dot(normal, up)) > 0.7`.
 
 ---
 
@@ -394,24 +484,26 @@ Event-Vision/
 1. **Non-LiDAR measurement accuracy:** Raycast depth estimation without LiDAR is unreliable for small measurements. Walk mode helps for larger distances.
 2. **One wall missing** from 3D viewer in testing &mdash; possible RoomPlan detection or transform issue.
 3. **No in-app media gallery** for browsing captured photos/videos. Storage is in place at `Documents/EventVision/`.
-4. **Live AR prop placement** not built yet (see Planned Features below).
-5. **No export/share** for scan results or placement layouts.
-6. **SourceKit diagnostics** show cross-file resolution errors in the editor (e.g., "Cannot find type X in scope") but these are false positives &mdash; the full project builds successfully via `xcodebuild`.
-7. **Pre-Session 4 scans have no USDZ:** Scans saved before Session 4 won&rsquo;t have a `.usdz` file, so the RoomPlan View toggle won&rsquo;t appear. Must rescan to get the USDZ export.
+4. **No export/share** for scan results or placement layouts.
+5. **SourceKit diagnostics** show cross-file resolution errors in the editor (e.g., "Cannot find type X in scope") but these are false positives &mdash; the full project builds successfully via `xcodebuild`.
+6. **Pre-Session 4 scans have no USDZ:** Scans saved before Session 4 won&rsquo;t have a `.usdz` file, so the RoomPlan View toggle won&rsquo;t appear. Must rescan to get the USDZ export.
+7. **Rotation rings still hard to grab in some orientations:** The invisible fat hit-test torus helps but some rings can still be tricky depending on camera angle. May need further UX refinement (e.g., proximity-based selection or separate rotation mode toggle).
+8. **Props on horizontal surfaces may still face wrong direction:** The `uprightTransform` uses `surfaceAlignedTransform` with a synthetic horizontal normal toward the camera. If this still shows W&times;D instead of W&times;H in some cases, may need to investigate whether `surfaceAlignedTransform` itself has an axis convention issue for certain orientations.
 
 ---
 
 ## Planned Features
 
-### Next Up (designed, not yet built)
-1. **Live AR prop placement** &mdash; Place event assets in real-time while at the venue using ARKit + camera. Will use `ARSCNView` with plane detection, ghost preview following raycast, tap to place. Shares `PlacedProp` model and `PropNodeBuilder` with offline mode.
+### Next Up
+1. **Refine rotation UX** &mdash; Further improve ring grab reliability, possibly add a rotation mode toggle or long-press to enter rotation
+2. **Prop orientation fix verification** &mdash; Device test the horizontal surface placement to confirm W&times;H always faces the user
 
 ### Future
-2. **Pinch to scale** &mdash; Pinch gesture for resizing (in addition to existing sliders)
-3. **Web companion** &mdash; View scans, manage image library (React/Next.js)
-4. **Android port** &mdash; ARCore + Kotlin
-5. **In-app media gallery** &mdash; Browse captured photos/videos tagged by event/venue
-6. **Export/share scan results** &mdash; PDF or shareable format with room dimensions + placed props
+3. **Pinch to scale** &mdash; Pinch gesture for resizing (in addition to existing sliders)
+4. **Web companion** &mdash; View scans, manage image library (React/Next.js)
+5. **Android port** &mdash; ARCore + Kotlin
+6. **In-app media gallery** &mdash; Browse captured photos/videos tagged by event/venue
+7. **Export/share scan results** &mdash; PDF or shareable format with room dimensions + placed props
 
 ---
 
@@ -453,9 +545,9 @@ Documents/EventVision/
 5. For LiDAR features, use iPhone 14 Pro Max
 6. For non-LiDAR testing, use iPhone 16
 
-### Where we left off (March 22, 2026 &mdash; Session 4)
-- All features from Sessions 1-4 are built and **compiling successfully**
-- Session 4 added: placement mode Done button, USDZ export/viewer for saved scans, RoomPlan View toggle, 2&times;2 post-scan button grid, prop move (drag), prop rotation handles (Z-axis + Y-axis), auto-face camera on placement, SCNBox face fix
-- **Prop move/drag is now implemented** &mdash; removed from Known Issues
-- **Needs device testing** of all Session 4 features (move, rotate, USDZ viewer, placement mode toggle)
-- After device testing, the **next major feature** is **live AR prop placement**
+### Where we left off (March 24, 2026 &mdash; Session 5)
+- All features from Sessions 1-5 are built and **compiling successfully**
+- Session 5 added: live AR prop placement (two entry points), 3-axis rotation gizmo rings (replacing old blue/orange handles), compact AR controls with Size sheet, auto-open Size for unsized assets, upright placement on horizontal surfaces, transform sync guards for smooth gestures
+- **Needs device testing:** Horizontal surface prop orientation (should show W&times;H facing camera, not W&times;D). If still wrong, `surfaceAlignedTransform` axis convention may need adjustment.
+- **Rotation rings** work but can still be hard to grab in some orientations &mdash; may need UX refinement
+- **Next priorities:** Verify prop orientation on device, refine rotation grab UX, then move to export/share or web companion

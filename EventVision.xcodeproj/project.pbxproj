@@ -29,6 +29,8 @@
 		AA000022 /* InteractiveRoom3DViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000022 /* InteractiveRoom3DViewer.swift */; };
 		AA000023 /* AssetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000023 /* AssetDetailView.swift */; };
 		AA000024 /* DimensionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000024 /* DimensionSlider.swift */; };
+		AA000025 /* ARPlaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000025 /* ARPlaceView.swift */; };
+		AA000026 /* ARPlaceSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000026 /* ARPlaceSceneView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +58,8 @@
 		AB000022 /* InteractiveRoom3DViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractiveRoom3DViewer.swift; sourceTree = "<group>"; };
 		AB000023 /* AssetDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetDetailView.swift; sourceTree = "<group>"; };
 		AB000024 /* DimensionSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DimensionSlider.swift; sourceTree = "<group>"; };
+		AB000025 /* ARPlaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARPlaceView.swift; sourceTree = "<group>"; };
+		AB000026 /* ARPlaceSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARPlaceSceneView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +123,8 @@
 				AB000022 /* InteractiveRoom3DViewer.swift */,
 				AB000023 /* AssetDetailView.swift */,
 				AB000024 /* DimensionSlider.swift */,
+				AB000025 /* ARPlaceView.swift */,
+				AB000026 /* ARPlaceSceneView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -229,6 +235,8 @@
 				AA000022 /* InteractiveRoom3DViewer.swift in Sources */,
 				AA000023 /* AssetDetailView.swift in Sources */,
 				AA000024 /* DimensionSlider.swift in Sources */,
+				AA000025 /* ARPlaceView.swift in Sources */,
+				AA000026 /* ARPlaceSceneView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -154,6 +154,130 @@ enum PropNodeBuilder {
         return transform
     }
 
+    // MARK: - Rotation Gizmo Rings
+
+    /// Builds 3 rotation rings (X=red, Y=green, Z=blue) around a prop.
+    /// Each ring is an SCNTorus with arrow indicators. Returns a parent node containing all rings.
+    static func makeRotationGizmo(faceWidth: CGFloat, faceHeight: CGFloat) -> SCNNode {
+        let gizmo = SCNNode()
+        gizmo.name = "rotationGizmo"
+
+        let radius = CGFloat(max(Float(faceWidth), Float(faceHeight)) * 0.6 + 0.1)
+        let visiblePipe: CGFloat = 0.008
+        let hitPipe: CGFloat = 0.04  // Invisible fat tube for easy grabbing
+
+        // X-axis ring (red) — pitch rotation
+        let xRing = makeRing(radius: radius, visiblePipe: visiblePipe, hitPipe: hitPipe, color: .systemRed, name: "ringX")
+        xRing.eulerAngles.z = .pi / 2
+        gizmo.addChildNode(xRing)
+
+        // Y-axis ring (green) — yaw/turntable rotation
+        let yRing = makeRing(radius: radius, visiblePipe: visiblePipe, hitPipe: hitPipe, color: .systemGreen, name: "ringY")
+        gizmo.addChildNode(yRing)
+
+        // Z-axis ring (blue) — roll/spin on wall
+        let zRing = makeRing(radius: radius, visiblePipe: visiblePipe, hitPipe: hitPipe, color: .systemBlue, name: "ringZ")
+        zRing.eulerAngles.x = .pi / 2
+        gizmo.addChildNode(zRing)
+
+        // Arrow grab handles at 4 points on each ring
+        addArrowIndicators(to: xRing, radius: radius, color: .systemRed)
+        addArrowIndicators(to: yRing, radius: radius, color: .systemGreen)
+        addArrowIndicators(to: zRing, radius: radius, color: .systemBlue)
+
+        return gizmo
+    }
+
+    private static func makeRing(radius: CGFloat, visiblePipe: CGFloat, hitPipe: CGFloat, color: UIColor, name: String) -> SCNNode {
+        let container = SCNNode()
+        container.name = name
+
+        // Visible thin ring
+        let torus = SCNTorus(ringRadius: radius, pipeRadius: visiblePipe)
+        let mat = SCNMaterial()
+        mat.diffuse.contents = color.withAlphaComponent(0.7)
+        mat.lightingModel = .constant
+        mat.isDoubleSided = true
+        torus.materials = [mat]
+        let visibleNode = SCNNode(geometry: torus)
+        visibleNode.name = name
+        container.addChildNode(visibleNode)
+
+        // Invisible fat ring for hit testing
+        let hitTorus = SCNTorus(ringRadius: radius, pipeRadius: hitPipe)
+        let hitMat = SCNMaterial()
+        hitMat.diffuse.contents = UIColor.clear
+        hitMat.lightingModel = .constant
+        hitMat.isDoubleSided = true
+        hitMat.colorBufferWriteMask = []  // Invisible — doesn't render
+        hitTorus.materials = [hitMat]
+        let hitNode = SCNNode(geometry: hitTorus)
+        hitNode.name = name
+        hitNode.opacity = 0.001  // Nearly invisible but still hit-testable
+        container.addChildNode(hitNode)
+
+        return container
+    }
+
+    private static func addArrowIndicators(to ringNode: SCNNode, radius: CGFloat, color: UIColor) {
+        let arrowImage = renderArrowImage(color: color)
+        let arrowSize: CGFloat = 0.1
+
+        // Place 4 arrows evenly around the ring for more grab targets
+        for i in 0..<4 {
+            let angle = Float(i) * (.pi / 2)
+            let x = Float(radius) * cos(angle)
+            let z = Float(radius) * sin(angle)
+
+            let arrowPlane = SCNPlane(width: arrowSize, height: arrowSize)
+            let mat = SCNMaterial()
+            mat.diffuse.contents = arrowImage
+            mat.lightingModel = .constant
+            mat.isDoubleSided = true
+            arrowPlane.materials = [mat]
+
+            let arrowNode = SCNNode(geometry: arrowPlane)
+            arrowNode.position = SCNVector3(x, 0, z)
+            arrowNode.constraints = [SCNBillboardConstraint()]
+            arrowNode.name = ringNode.name
+            ringNode.addChildNode(arrowNode)
+        }
+    }
+
+    private static func renderArrowImage(color: UIColor) -> UIImage {
+        let size = CGSize(width: 64, height: 64)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            let rect = CGRect(origin: .zero, size: size)
+            color.withAlphaComponent(0.9).setFill()
+            UIBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2)).fill()
+
+            let config = UIImage.SymbolConfiguration(pointSize: 28, weight: .bold)
+            if let symbol = UIImage(systemName: "arrow.trianglehead.2.clockwise.rotate.90", withConfiguration: config) {
+                let tinted = symbol.withTintColor(.white, renderingMode: .alwaysOriginal)
+                let symbolSize = tinted.size
+                let origin = CGPoint(x: (size.width - symbolSize.width) / 2,
+                                     y: (size.height - symbolSize.height) / 2)
+                tinted.draw(at: origin)
+            }
+        }
+    }
+
+    /// Identifies which rotation axis a hit node belongs to. Returns "X", "Y", or "Z", or nil.
+    static func rotationAxis(for node: SCNNode) -> String? {
+        var current: SCNNode? = node
+        while let n = current {
+            switch n.name {
+            case "ringX": return "X"
+            case "ringY": return "Y"
+            case "ringZ": return "Z"
+            default: break
+            }
+            current = n.parent
+        }
+        return nil
+    }
+
     // MARK: - Label Rendering
 
     static func makePropLabel(assetName: String, widthMeters: Float, heightMeters: Float, depthMeters: Float = 0) -> SCNNode {

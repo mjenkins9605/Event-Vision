@@ -364,17 +364,32 @@ struct SavedScanDetailView: View {
 
                 // Bottom controls
                 VStack(spacing: 12) {
-                    NavigationLink {
-                        PropPlacementView(scan: scan)
-                    } label: {
-                        Label("Place Props", systemImage: "square.on.square.badge.person.crop")
-                            .font(.headline)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 12)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(25)
+                    HStack(spacing: 10) {
+                        NavigationLink {
+                            PropPlacementView(scan: scan)
+                        } label: {
+                            Label("Place Props", systemImage: "square.on.square.badge.person.crop")
+                                .font(.headline)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.green)
+                                .foregroundColor(.white)
+                                .cornerRadius(25)
+                        }
+
+                        NavigationLink {
+                            ARPlaceView(initialProps: scan.placedProps)
+                        } label: {
+                            Label("AR View", systemImage: "arkit")
+                                .font(.headline)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.purple)
+                                .foregroundColor(.white)
+                                .cornerRadius(25)
+                        }
                     }
                     .padding(.horizontal, 20)
 
