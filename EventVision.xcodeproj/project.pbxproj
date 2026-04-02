@@ -31,6 +31,7 @@
 		AA000024 /* DimensionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000024 /* DimensionSlider.swift */; };
 		AA000025 /* ARPlaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000025 /* ARPlaceView.swift */; };
 		AA000026 /* ARPlaceSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000026 /* ARPlaceSceneView.swift */; };
+		AA000027 /* PropInteractionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000027 /* PropInteractionHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		AB000024 /* DimensionSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DimensionSlider.swift; sourceTree = "<group>"; };
 		AB000025 /* ARPlaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARPlaceView.swift; sourceTree = "<group>"; };
 		AB000026 /* ARPlaceSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARPlaceSceneView.swift; sourceTree = "<group>"; };
+		AB000027 /* PropInteractionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropInteractionHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +107,7 @@
 				AB000017 /* ImageAsset.swift */,
 				AB000018 /* AssetStore.swift */,
 				AB000019 /* PropNodeBuilder.swift */,
+				AB000027 /* PropInteractionHelper.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -237,6 +240,7 @@
 				AA000024 /* DimensionSlider.swift in Sources */,
 				AA000025 /* ARPlaceView.swift in Sources */,
 				AA000026 /* ARPlaceSceneView.swift in Sources */,
+				AA000027 /* PropInteractionHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

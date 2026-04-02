@@ -325,14 +325,14 @@ struct Room3DViewer: UIViewRepresentable {
         for edge in [edge1, edge2, edge3, edge4] { edge.name = "measurementEdge" }
 
         let topMid = (tl + tr) / 2
-        let widthLabel = makeImageLabel(text: MeasurementFormatter.feetInches(w), color: edgeColor)
+        let widthLabel = PropNodeBuilder.makeImageLabel(text: MeasurementFormatter.feetInches(w), color: edgeColor)
         widthLabel.simdWorldPosition = topMid
         widthLabel.constraints = [SCNBillboardConstraint()]
         widthLabel.name = "measurementLabel"
         scene.rootNode.addChildNode(widthLabel)
 
         let leftMid = (tl + bl) / 2
-        let heightLabel = makeImageLabel(text: MeasurementFormatter.feetInches(h), color: edgeColor)
+        let heightLabel = PropNodeBuilder.makeImageLabel(text: MeasurementFormatter.feetInches(h), color: edgeColor)
         heightLabel.simdWorldPosition = leftMid
         heightLabel.constraints = [SCNBillboardConstraint()]
         heightLabel.name = "measurementLabel"
@@ -354,48 +354,6 @@ struct Room3DViewer: UIViewRepresentable {
         return node
     }
 
-    private func makeImageLabel(text: String, color: UIColor) -> SCNNode {
-        let image = renderLabelImage(text: text, bgColor: color)
-        let aspect = image.size.width / image.size.height
-        let labelHeight: CGFloat = 0.12
-        let labelWidth = labelHeight * aspect
-
-        let plane = SCNPlane(width: labelWidth, height: labelHeight)
-        let mat = SCNMaterial()
-        mat.diffuse.contents = image
-        mat.lightingModel = .constant
-        mat.isDoubleSided = true
-        plane.materials = [mat]
-
-        return SCNNode(geometry: plane)
-    }
-
-    private func renderLabelImage(text: String, bgColor: UIColor) -> UIImage {
-        let font = UIFont.systemFont(ofSize: 28, weight: .bold)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: UIColor.white
-        ]
-        let textSize = (text as NSString).size(withAttributes: attrs)
-        let padding: CGFloat = 16
-        let size = CGSize(width: textSize.width + padding * 2, height: textSize.height + padding)
-
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { ctx in
-            let rect = CGRect(origin: .zero, size: size)
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-            bgColor.withAlphaComponent(0.9).setFill()
-            path.fill()
-
-            let textRect = CGRect(
-                x: (size.width - textSize.width) / 2,
-                y: (size.height - textSize.height) / 2,
-                width: textSize.width,
-                height: textSize.height
-            )
-            (text as NSString).draw(in: textRect, withAttributes: attrs)
-        }
-    }
 }
 
 // MARK: - USDZ Room Viewer (RoomPlan export)
@@ -626,9 +584,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate {
 class RoomScanManager: ObservableObject {
     @Published var isScanning = false
     @Published var statusMessage: String? = "Tap \u{2018}Start Scan\u{2019} to begin"
-    @Published var selectedMeasurement: SurfaceMeasurement?
     @Published var scannedRoom: CapturedRoom?
-    var pendingScan = false
 
     weak var captureViewController: RoomCaptureViewController?
 
@@ -643,7 +599,6 @@ class RoomScanManager: ObservableObject {
         }
 
         scannedRoom = nil
-        selectedMeasurement = nil
 
         let config = RoomCaptureSession.Configuration()
         vc.roomCaptureView.captureSession.run(configuration: config)
@@ -657,21 +612,4 @@ class RoomScanManager: ObservableObject {
         isScanning = false
         statusMessage = "Processing scan..."
     }
-}
-
-// MARK: - Surface Measurement Model
-
-struct SurfaceMeasurement: Identifiable {
-    let id: UUID
-    let label: String
-    let icon: String
-    let width: Float
-    let height: Float
-    let depth: Float
-    let category: SurfaceCategory
-    let transform: simd_float4x4
-}
-
-enum SurfaceCategory {
-    case wall, door, window, opening
 }

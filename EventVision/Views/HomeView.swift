@@ -25,7 +25,7 @@ struct HomeView: View {
                     }
                     .padding(.bottom, 12)
 
-                    Text("Event &amp; Premiere Planning")
+                    Text("Event & Premiere Planning")
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.gray)
@@ -302,7 +302,7 @@ struct BulbDot: View {
             .shadow(color: bulbColor.opacity(baseOpacity * 0.8), radius: 4, x: 0, y: 0)
             .opacity(baseOpacity)
             .animation(
-                .easeInOut(duration: Double.random(in: 1.2...2.2))
+                .easeInOut(duration: 1.2 + (Double(index % 7) * 0.15))
                 .repeatForever(autoreverses: true)
                 .delay(phase * 1.5),
                 value: animating

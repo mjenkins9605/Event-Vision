@@ -2,6 +2,8 @@ import SceneKit
 import UIKit
 
 enum PropNodeBuilder {
+    private static var arrowImageCache: [UIColor: UIImage] = [:]
+    private static var shadowImageCache: UIImage?
     static func makeNode(for prop: PlacedProp, image: UIImage, assetName: String) -> SCNNode {
         let node = SCNNode()
         node.simdTransform = prop.transform.matrix
@@ -17,10 +19,12 @@ enum PropNodeBuilder {
             )
             let faceMat = SCNMaterial()
             faceMat.diffuse.contents = image
-            faceMat.lightingModel = .constant
+            faceMat.lightingModel = .physicallyBased
+            faceMat.roughness.contents = 0.6
             let sideMat = SCNMaterial()
             sideMat.diffuse.contents = UIColor.systemGray.withAlphaComponent(0.5)
-            sideMat.lightingModel = .constant
+            sideMat.lightingModel = .physicallyBased
+            sideMat.roughness.contents = 0.8
             // SCNBox face order: front, right, back, left, top, bottom
             box.materials = [faceMat, sideMat, sideMat, sideMat, sideMat, sideMat]
 
@@ -38,13 +42,17 @@ enum PropNodeBuilder {
             let material = SCNMaterial()
             material.diffuse.contents = image
             material.isDoubleSided = true
-            material.lightingModel = .constant
+            material.lightingModel = .physicallyBased
+            material.roughness.contents = 0.6
             plane.materials = [material]
 
             let planeNode = SCNNode(geometry: plane)
             planeNode.name = "propPlane"
             node.addChildNode(planeNode)
         }
+
+        // Soft shadow beneath the prop for ground contact
+        addShadow(to: node, prop: prop)
 
         // Floating label above the prop
         let label = makePropLabel(assetName: assetName, widthMeters: prop.widthMeters, heightMeters: prop.heightMeters, depthMeters: prop.depthMeters)
@@ -53,6 +61,45 @@ enum PropNodeBuilder {
         node.addChildNode(label)
 
         return node
+    }
+
+    private static func addShadow(to node: SCNNode, prop: PlacedProp) {
+        let shadowSize = max(prop.widthMeters, prop.depthMeters > 0.001 ? prop.depthMeters : prop.widthMeters * 0.3) * 1.4
+        let shadow = SCNPlane(width: CGFloat(shadowSize), height: CGFloat(shadowSize))
+        let mat = SCNMaterial()
+        mat.diffuse.contents = renderShadowImage()
+        mat.lightingModel = .constant
+        mat.isDoubleSided = true
+        mat.writesToDepthBuffer = false
+        shadow.materials = [mat]
+
+        let shadowNode = SCNNode(geometry: shadow)
+        shadowNode.eulerAngles.x = -.pi / 2
+        shadowNode.position = SCNVector3(0, -prop.heightMeters / 2 + 0.002, prop.depthMeters > 0.001 ? prop.depthMeters / 2 : 0)
+        shadowNode.opacity = 0.6
+        shadowNode.name = "propShadow"
+        shadowNode.renderingOrder = -1
+        node.addChildNode(shadowNode)
+    }
+
+    private static func renderShadowImage() -> UIImage {
+        if let cached = shadowImageCache { return cached }
+        let size: CGFloat = 256
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        let image = renderer.image { ctx in
+            let center = CGPoint(x: size / 2, y: size / 2)
+            let colors = [UIColor.black.withAlphaComponent(0.4).cgColor,
+                          UIColor.black.withAlphaComponent(0.0).cgColor] as CFArray
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                       colors: colors,
+                                       locations: [0.0, 1.0])!
+            ctx.cgContext.drawRadialGradient(gradient,
+                                             startCenter: center, startRadius: 0,
+                                             endCenter: center, endRadius: size / 2,
+                                             options: .drawsAfterEndLocation)
+        }
+        shadowImageCache = image
+        return image
     }
 
     private static func addFloorFootprint(to node: SCNNode, prop: PlacedProp) {
@@ -94,10 +141,12 @@ enum PropNodeBuilder {
             )
             let faceMat = SCNMaterial()
             faceMat.diffuse.contents = image
-            faceMat.lightingModel = .constant
+            faceMat.lightingModel = .physicallyBased
+            faceMat.roughness.contents = 0.6
             let sideMat = SCNMaterial()
             sideMat.diffuse.contents = UIColor.systemGray.withAlphaComponent(0.5)
-            sideMat.lightingModel = .constant
+            sideMat.lightingModel = .physicallyBased
+            sideMat.roughness.contents = 0.8
             // SCNBox face order: front, right, back, left, top, bottom
             box.materials = [faceMat, sideMat, sideMat, sideMat, sideMat, sideMat]
 
@@ -112,7 +161,8 @@ enum PropNodeBuilder {
             let material = SCNMaterial()
             material.diffuse.contents = image
             material.isDoubleSided = true
-            material.lightingModel = .constant
+            material.lightingModel = .physicallyBased
+            material.roughness.contents = 0.6
             plane.materials = [material]
 
             let planeNode = SCNNode(geometry: plane)
@@ -120,7 +170,9 @@ enum PropNodeBuilder {
             node.addChildNode(planeNode)
         }
 
-        // Rebuild label
+        // Shadow and label
+        addShadow(to: node, prop: prop)
+
         let label = makePropLabel(assetName: assetName, widthMeters: prop.widthMeters, heightMeters: prop.heightMeters, depthMeters: prop.depthMeters)
         label.position = SCNVector3(0, Float(prop.heightMeters / 2) + 0.08, 0)
         label.constraints = [SCNBillboardConstraint()]
@@ -245,9 +297,10 @@ enum PropNodeBuilder {
     }
 
     private static func renderArrowImage(color: UIColor) -> UIImage {
+        if let cached = arrowImageCache[color] { return cached }
         let size = CGSize(width: 64, height: 64)
         let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { _ in
+        let image = renderer.image { _ in
             let rect = CGRect(origin: .zero, size: size)
             color.withAlphaComponent(0.9).setFill()
             UIBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2)).fill()
@@ -261,6 +314,8 @@ enum PropNodeBuilder {
                 tinted.draw(at: origin)
             }
         }
+        arrowImageCache[color] = image
+        return image
     }
 
     /// Identifies which rotation axis a hit node belongs to. Returns "X", "Y", or "Z", or nil.

@@ -1,4 +1,5 @@
 import Foundation
+import simd
 
 // MARK: - Image Asset
 
@@ -156,5 +157,38 @@ struct AssetPreset: Codable, Identifiable {
         self.widthMeters = widthMeters
         self.heightMeters = heightMeters
         self.dateCreated = Date()
+    }
+}
+
+// MARK: - Shared Prop Helpers
+
+extension PlacedProp {
+    /// Returns true if this prop's dimensions differ from the default size
+    /// and all existing presets for its asset.
+    func isNewPresetSize(assetStore: AssetStore) -> Bool {
+        let existing = assetStore.presets(for: assetID)
+        let asset = assetStore.assets.first { $0.id == assetID }
+        let defaultW: Float = 0.5
+        let defaultH: Float = (asset != nil) ? defaultW / asset!.aspectRatio : 0.5
+        let matchesDefault = abs(widthMeters - defaultW) < 0.01 && abs(heightMeters - defaultH) < 0.01
+        if matchesDefault { return false }
+        return !existing.contains { abs($0.widthMeters - widthMeters) < 0.01 && abs($0.heightMeters - heightMeters) < 0.01 }
+    }
+
+    /// Creates a duplicate of this prop offset to the right along its local X axis.
+    func duplicated() -> PlacedProp {
+        var t = transform.matrix
+        let right = simd_float3(t.columns.0.x, t.columns.0.y, t.columns.0.z)
+        let offset = right * (widthMeters * 0.6)
+        t.columns.3 += simd_float4(offset, 0)
+
+        return PlacedProp(
+            assetID: assetID,
+            transform: CodableMatrix4x4(t),
+            widthMeters: widthMeters,
+            heightMeters: heightMeters,
+            depthMeters: depthMeters,
+            surfaceID: surfaceID
+        )
     }
 }

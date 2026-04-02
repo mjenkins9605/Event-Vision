@@ -5,17 +5,20 @@ class ScanStore: ObservableObject {
     @Published var scans: [SavedScan] = []
 
     private let directory: URL
+    private var isLoaded = false
+    private var pendingMutations: [() -> Void] = []
 
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         directory = docs.appendingPathComponent("EventVision/Scans", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        loadAll()
+        loadAllAsync()
     }
 
     // MARK: - Save
 
     func save(_ scan: SavedScan, room: CapturedRoom? = nil) {
+        // Always persist to disk immediately
         let fileURL = directory.appendingPathComponent("\(scan.id.uuidString).json")
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -23,12 +26,23 @@ class ScanStore: ObservableObject {
             try? data.write(to: fileURL)
         }
 
-        // Export USDZ if we have the live CapturedRoom
         if let room = room {
             let usdzURL = directory.appendingPathComponent("\(scan.id.uuidString).usdz")
             try? room.export(to: usdzURL)
         }
 
+        // Defer in-memory update if initial load hasn't completed
+        if !isLoaded {
+            pendingMutations.append { [weak self] in
+                self?.applyUpsert(scan)
+            }
+            return
+        }
+
+        applyUpsert(scan)
+    }
+
+    private func applyUpsert(_ scan: SavedScan) {
         if let index = scans.firstIndex(where: { $0.id == scan.id }) {
             scans[index] = scan
         } else {
@@ -51,27 +65,47 @@ class ScanStore: ObservableObject {
         try? FileManager.default.removeItem(at: fileURL)
         let usdzFile = directory.appendingPathComponent("\(scan.id.uuidString).usdz")
         try? FileManager.default.removeItem(at: usdzFile)
+
+        if !isLoaded {
+            let scanID = scan.id
+            pendingMutations.append { [weak self] in
+                self?.scans.removeAll { $0.id == scanID }
+            }
+            return
+        }
+
         scans.removeAll { $0.id == scan.id }
     }
 
     // MARK: - Load All
 
-    private func loadAll() {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+    private func loadAllAsync() {
+        let dir = directory
+        DispatchQueue.global(qos: .userInitiated).async {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
 
-        guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
-            return
-        }
+            guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else {
+                return
+            }
 
-        var loaded: [SavedScan] = []
-        for file in files where file.pathExtension == "json" {
-            if let data = try? Data(contentsOf: file),
-               let scan = try? decoder.decode(SavedScan.self, from: data) {
-                loaded.append(scan)
+            var loaded: [SavedScan] = []
+            for file in files where file.pathExtension == "json" {
+                if let data = try? Data(contentsOf: file),
+                   let scan = try? decoder.decode(SavedScan.self, from: data) {
+                    loaded.append(scan)
+                }
+            }
+
+            let sorted = loaded.sorted { $0.date > $1.date }
+            DispatchQueue.main.async {
+                self.scans = sorted
+                self.isLoaded = true
+                for mutation in self.pendingMutations {
+                    mutation()
+                }
+                self.pendingMutations.removeAll()
             }
         }
-
-        scans = loaded.sorted { $0.date > $1.date }
     }
 }

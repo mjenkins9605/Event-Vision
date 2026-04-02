@@ -100,22 +100,6 @@ struct ManualMeasureView: View {
                         .padding(.bottom, 8)
                 }
 
-                // Debug info — shows raw values so we can diagnose accuracy
-                if !measure.debugLines.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(measure.debugLines, id: \.self) { line in
-                            Text(line)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .padding(8)
-                    .background(Color.black.opacity(0.7))
-                    .cornerRadius(8)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
-                }
-
                 // Mode hint
                 if measure.mode == .walk {
                     Text(measure.points.isEmpty
@@ -241,7 +225,6 @@ class ManualMeasureManager: NSObject, ObservableObject, ARSCNViewDelegate, ARSes
     @Published var liveDistance: Float?
     @Published var trackingReady = false
     @Published var surfaceDetected = false
-    @Published var debugLines: [String] = []
 
     var flashlightRequested = false
     private var flashlightActivated = false
@@ -298,9 +281,7 @@ class ManualMeasureManager: NSObject, ObservableObject, ARSCNViewDelegate, ARSes
         }
 
         // Live distance update
-        if !points.isEmpty {
-            updateLiveDistance(frame: frame)
-        }
+        updateLiveDistance(frame: frame)
     }
 
     func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
@@ -356,10 +337,7 @@ class ManualMeasureManager: NSObject, ObservableObject, ARSCNViewDelegate, ARSes
             point = hit
         }
 
-        // Debug: log raw position
         let pinIndex = points.count
-        var newDebug: [String] = []
-        newDebug.append("Pin \(pinIndex + 1): x=\(String(format: "%.4f", point.x)) y=\(String(format: "%.4f", point.y)) z=\(String(format: "%.4f", point.z))")
 
         // Add visual pin
         let pinNode = addPin(at: point, index: pinIndex)
@@ -370,18 +348,11 @@ class ManualMeasureManager: NSObject, ObservableObject, ARSCNViewDelegate, ARSes
         // If we have a previous point, draw a line and record the segment
         if let lastPoint = points.last {
             let dist = distance(from: lastPoint, to: point)
-            let dx = point.x - lastPoint.x
-            let dy = point.y - lastPoint.y
-            let dz = point.z - lastPoint.z
-            newDebug.append("dx=\(String(format: "%.4f", dx)) dy=\(String(format: "%.4f", dy)) dz=\(String(format: "%.4f", dz))")
-            newDebug.append("dist=\(String(format: "%.4f", dist))m = \(String(format: "%.1f", dist * 39.3701))in")
             segments.append(dist)
             if let lineNode = addLine(from: lastPoint, to: point, color: .white) {
                 lineNodes.append(lineNode)
             }
         }
-
-        debugLines = newDebug
 
         points.append(point)
         liveDistance = nil
@@ -431,17 +402,16 @@ class ManualMeasureManager: NSObject, ObservableObject, ARSCNViewDelegate, ARSes
         points.removeAll()
         segments.removeAll()
         liveDistance = nil
-        debugLines = []
         statusMessage = "Ready \u{2014} walk to your start point"
     }
 
     // MARK: - Live Distance
 
     private func updateLiveDistance(frame: ARFrame) {
-        guard let lastPoint = points.last else { return }
-
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let sceneView = self.sceneView else { return }
+            guard let self = self,
+                  let sceneView = self.sceneView,
+                  let lastPoint = self.points.last else { return }
 
             let currentPoint: SCNVector3
 

@@ -213,8 +213,6 @@ class CameraManager: NSObject, ObservableObject {
             if self.session.isRunning {
                 self.session.stopRunning()
             }
-            // Small delay to ensure camera hardware is fully released
-            Thread.sleep(forTimeInterval: 0.3)
             DispatchQueue.main.async {
                 self.isSessionRunning = false
                 completion?()

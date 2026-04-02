@@ -8,6 +8,8 @@ struct ARPlaceSceneView: UIViewRepresentable {
     @Binding var placedProps: [PlacedProp]
     @Binding var selectedPropID: UUID?
     @Binding var trackingStatus: String
+    var snapshotTrigger: Int = 0
+    var onSnapshot: ((UIImage) -> Void)?
     var selectedAsset: ImageAsset?
     var presetWidth: Float?
     var presetHeight: Float?
@@ -33,6 +35,20 @@ struct ARPlaceSceneView: UIViewRepresentable {
 
         context.coordinator.sceneView = sceneView
 
+        // Coaching overlay — Apple's built-in animation for surface detection guidance
+        let coaching = ARCoachingOverlayView()
+        coaching.session = sceneView.session
+        coaching.goal = .anyPlane
+        coaching.activatesAutomatically = true
+        coaching.translatesAutoresizingMaskIntoConstraints = false
+        sceneView.addSubview(coaching)
+        NSLayoutConstraint.activate([
+            coaching.leadingAnchor.constraint(equalTo: sceneView.leadingAnchor),
+            coaching.trailingAnchor.constraint(equalTo: sceneView.trailingAnchor),
+            coaching.topAnchor.constraint(equalTo: sceneView.topAnchor),
+            coaching.bottomAnchor.constraint(equalTo: sceneView.bottomAnchor)
+        ])
+
         // Tap gesture for placement / selection
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         sceneView.addGestureRecognizer(tap)
@@ -41,6 +57,11 @@ struct ARPlaceSceneView: UIViewRepresentable {
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         pan.delegate = context.coordinator
         sceneView.addGestureRecognizer(pan)
+
+        // Pinch gesture for scaling props
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
+        pinch.delegate = context.coordinator
+        sceneView.addGestureRecognizer(pinch)
 
         // Load any initial props
         context.coordinator.syncProps(placedProps)
@@ -55,6 +76,12 @@ struct ARPlaceSceneView: UIViewRepresentable {
             context.coordinator.updateSelection(selectedPropID)
             context.coordinator.updateGhostAsset()
         }
+        // Snapshot trigger
+        if snapshotTrigger != context.coordinator.lastSnapshotTrigger {
+            context.coordinator.lastSnapshotTrigger = snapshotTrigger
+            let image = uiView.snapshot()
+            onSnapshot?(image)
+        }
     }
 
     // MARK: - Coordinator
@@ -62,26 +89,40 @@ struct ARPlaceSceneView: UIViewRepresentable {
     class Coordinator: NSObject, ARSCNViewDelegate, ARSessionDelegate, UIGestureRecognizerDelegate {
         var parent: ARPlaceSceneView
         weak var sceneView: ARSCNView?
-        var propNodes: [UUID: SCNNode] = [:]
-        private var selectionHighlight: SCNNode?
-        private var gizmoNode: SCNNode?
+        let helper = PropInteractionHelper()
 
         // Ghost preview
         private var ghostNode: SCNNode?
         private var ghostAssetID: UUID?
+        private var ghostPresetWidth: Float?
+        private var ghostPresetHeight: Float?
 
         // Plane visualization
         private var planeNodes: [UUID: SCNNode] = [:]
+        private var firstPlaneDetected = false
 
-        // Drag state
-        private enum DragMode { case move, rotateAxis(simd_float3) }
-        private var dragMode: DragMode = .move
-        var isDragging = false
-        var suppressTransformSync = false
-        private var lastDragLocation: CGPoint = .zero
+        // Haptics
+        private let impactLight = UIImpactFeedbackGenerator(style: .light)
+        private let impactMedium = UIImpactFeedbackGenerator(style: .medium)
+        private let notificationFeedback = UINotificationFeedbackGenerator()
+
+        // Pinch state
+        private var pinchStartWidth: Float = 0
+        private var pinchStartHeight: Float = 0
+
+        // Snapshot
+        var lastSnapshotTrigger = 0
+
+        var isDragging: Bool { helper.isDragging }
+        var suppressTransformSync: Bool { helper.suppressTransformSync }
 
         init(parent: ARPlaceSceneView) {
             self.parent = parent
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            // Allow pinch alongside pan
+            return (gestureRecognizer is UIPinchGestureRecognizer) || (otherGestureRecognizer is UIPinchGestureRecognizer)
         }
 
         // MARK: - ARSessionDelegate
@@ -118,10 +159,35 @@ struct ARPlaceSceneView: UIViewRepresentable {
             updateGhostPosition()
         }
 
+        func sessionWasInterrupted(_ session: ARSession) {
+            DispatchQueue.main.async {
+                self.parent.trackingStatus = "Session interrupted"
+            }
+        }
+
+        func sessionInterruptionEnded(_ session: ARSession) {
+            DispatchQueue.main.async {
+                self.parent.trackingStatus = "Resuming..."
+            }
+            // Re-run with reset to recover clean tracking
+            guard let sceneView = sceneView else { return }
+            let config = ARWorldTrackingConfiguration()
+            config.planeDetection = [.horizontal, .vertical]
+            config.environmentTexturing = .automatic
+            if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
+                config.frameSemantics.insert(.sceneDepth)
+            }
+            sceneView.session.run(config, options: [.resetTracking])
+        }
+
         // MARK: - ARSCNViewDelegate (plane visualization)
 
         func renderer(_ renderer: any SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
             guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
+            if !firstPlaneDetected {
+                firstPlaneDetected = true
+                DispatchQueue.main.async { self.notificationFeedback.notificationOccurred(.success) }
+            }
             let planeNode = makePlaneVisualization(for: planeAnchor)
             node.addChildNode(planeNode)
             planeNodes[anchor.identifier] = planeNode
@@ -140,16 +206,45 @@ struct ARPlaceSceneView: UIViewRepresentable {
             planeNodes.removeValue(forKey: anchor.identifier)
         }
 
+        private static var dotGridImage: UIImage = {
+            let size: CGFloat = 64
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+            return renderer.image { ctx in
+                UIColor.clear.setFill()
+                ctx.fill(CGRect(origin: .zero, size: CGSize(width: size, height: size)))
+                UIColor.cyan.withAlphaComponent(0.25).setFill()
+                let dotSize: CGFloat = 4
+                let spacing: CGFloat = 16
+                var x: CGFloat = spacing / 2
+                while x < size {
+                    var y: CGFloat = spacing / 2
+                    while y < size {
+                        UIBezierPath(ovalIn: CGRect(x: x - dotSize / 2, y: y - dotSize / 2, width: dotSize, height: dotSize)).fill()
+                        y += spacing
+                    }
+                    x += spacing
+                }
+            }
+        }()
+
         private func makePlaneVisualization(for anchor: ARPlaneAnchor) -> SCNNode {
             let plane = SCNPlane(width: CGFloat(anchor.planeExtent.width),
                                  height: CGFloat(anchor.planeExtent.height))
             let material = SCNMaterial()
-            material.diffuse.contents = UIColor.cyan.withAlphaComponent(0.08)
+            material.diffuse.contents = Self.dotGridImage
+            material.diffuse.wrapS = .repeat
+            material.diffuse.wrapT = .repeat
+            let metersPerTile: Float = 0.2
+            material.diffuse.contentsTransform = SCNMatrix4MakeScale(
+                Float(anchor.planeExtent.width) / metersPerTile,
+                Float(anchor.planeExtent.height) / metersPerTile, 1)
             material.isDoubleSided = true
+            material.lightingModel = .constant
             plane.materials = [material]
             let node = SCNNode(geometry: plane)
             node.eulerAngles.x = -.pi / 2
             node.position = SCNVector3(anchor.center.x, 0, anchor.center.z)
+            node.opacity = 0.7
             return node
         }
 
@@ -160,14 +255,20 @@ struct ARPlaceSceneView: UIViewRepresentable {
                 ghostNode?.removeFromParentNode()
                 ghostNode = nil
                 ghostAssetID = nil
+                ghostPresetWidth = nil
+                ghostPresetHeight = nil
                 return
             }
 
-            // Rebuild ghost if asset changed
-            if ghostAssetID != asset.id {
+            // Rebuild ghost if asset or preset dimensions changed
+            if ghostAssetID != asset.id
+                || ghostPresetWidth != parent.presetWidth
+                || ghostPresetHeight != parent.presetHeight {
                 ghostNode?.removeFromParentNode()
                 ghostNode = nil
                 ghostAssetID = asset.id
+                ghostPresetWidth = parent.presetWidth
+                ghostPresetHeight = parent.presetHeight
 
                 let width = parent.presetWidth ?? asset.physicalWidthMeters ?? 0.5
                 let height = parent.presetHeight ?? asset.physicalHeightMeters ?? (width / asset.aspectRatio)
@@ -188,6 +289,12 @@ struct ARPlaceSceneView: UIViewRepresentable {
                     }
                     node.name = "ghost"
                     node.isHidden = true
+                    // Subtle breathing pulse to draw the eye
+                    let pulse = SCNAction.sequence([
+                        SCNAction.fadeOpacity(to: 0.3, duration: 0.8),
+                        SCNAction.fadeOpacity(to: 0.6, duration: 0.8)
+                    ])
+                    node.runAction(SCNAction.repeatForever(pulse))
                     sceneView?.scene.rootNode.addChildNode(node)
                     ghostNode = node
                 }
@@ -227,20 +334,9 @@ struct ARPlaceSceneView: UIViewRepresentable {
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard gestureRecognizer is UIPanGestureRecognizer else { return true }
-            guard let sceneView = sceneView, let selectedID = parent.selectedPropID else { return false }
-
+            guard let sceneView = sceneView else { return false }
             let location = gestureRecognizer.location(in: sceneView)
-            let hits = sceneView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
-            for hit in hits {
-                if PropNodeBuilder.rotationAxis(for: hit.node) != nil { return true }
-                if let name = hit.node.name, let propID = UUID(uuidString: name), propID == selectedID {
-                    return true
-                }
-                if let propNode = propNodes[selectedID], isDescendant(hit.node, of: propNode) {
-                    return true
-                }
-            }
-            return false
+            return helper.shouldBeginPan(at: location, in: sceneView, selectedID: parent.selectedPropID)
         }
 
         // MARK: - Tap (select / place)
@@ -249,47 +345,25 @@ struct ARPlaceSceneView: UIViewRepresentable {
             guard let sceneView = sceneView else { return }
 
             let location = gesture.location(in: sceneView)
-
-            // Check if we tapped a rotation ring — rotate 45° on that axis
             let scnHits = sceneView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
-            if let selectedID = parent.selectedPropID, let node = propNodes[selectedID] {
-                for hit in scnHits {
-                    if let axis = PropNodeBuilder.rotationAxis(for: hit.node) {
-                        let rotAxis = rotationAxisVector(axis, transform: node.simdTransform)
-                        let rotation = simd_quatf(angle: .pi / 4, axis: simd_normalize(rotAxis))
-                        let rotMatrix = simd_float4x4(rotation)
-                        let pos = simd_float3(node.simdTransform.columns.3.x, node.simdTransform.columns.3.y, node.simdTransform.columns.3.z)
-                        var t = node.simdTransform
-                        t.columns.3 = simd_float4(0, 0, 0, 1)
-                        t = simd_mul(rotMatrix, t)
-                        t.columns.3 = simd_float4(pos, 1)
-                        node.simdTransform = t
-                        commitTransform(for: selectedID, from: node)
-                        updateSelection(selectedID)
-                        return
-                    }
+
+            // Check if we tapped a rotation ring
+            if helper.handleRingTap(in: scnHits, selectedID: parent.selectedPropID) {
+                if let selectedID = parent.selectedPropID, let node = helper.propNodes[selectedID] {
+                    commitTransform(for: selectedID, from: node)
+                    helper.updateSelection(selectedID)
                 }
+                impactLight.impactOccurred()
+                return
             }
 
-            // Check if we tapped an existing prop (SceneKit hit test)
-            for hit in scnHits {
-                if let nodeName = hit.node.name,
-                   let propID = UUID(uuidString: nodeName),
-                   propNodes[propID] != nil {
-                    DispatchQueue.main.async {
-                        self.parent.selectedPropID = propID
-                    }
-                    return
+            // Check if we tapped an existing prop
+            if let propID = helper.findTappedProp(in: scnHits) {
+                impactLight.impactOccurred()
+                DispatchQueue.main.async {
+                    self.parent.selectedPropID = propID
                 }
-                // Check parent nodes
-                for (id, propNode) in propNodes {
-                    if isDescendant(hit.node, of: propNode) {
-                        DispatchQueue.main.async {
-                            self.parent.selectedPropID = id
-                        }
-                        return
-                    }
-                }
+                return
             }
 
             // Place a new prop via ARKit raycast
@@ -302,7 +376,6 @@ struct ARPlaceSceneView: UIViewRepresentable {
 
             let normal = extractNormal(from: result)
             let transform: simd_float4x4
-            // If the surface is roughly horizontal (floor/table/ceiling), stand the prop upright
             if abs(simd_dot(normal, simd_float3(0, 1, 0))) > 0.7,
                let cameraTransform = sceneView.session.currentFrame?.camera.transform {
                 transform = uprightTransform(at: hitPoint, cameraTransform: cameraTransform)
@@ -322,6 +395,8 @@ struct ARPlaceSceneView: UIViewRepresentable {
                 depthMeters: depth
             )
 
+            impactMedium.impactOccurred()
+
             DispatchQueue.main.async {
                 self.parent.placedProps.append(prop)
                 self.parent.selectedPropID = prop.id
@@ -333,54 +408,20 @@ struct ARPlaceSceneView: UIViewRepresentable {
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             guard let sceneView = sceneView,
                   let selectedID = parent.selectedPropID,
-                  let node = propNodes[selectedID] else { return }
+                  let node = helper.propNodes[selectedID] else { return }
 
             switch gesture.state {
             case .began:
-                isDragging = true
-                sceneView.session.pause()
-                lastDragLocation = gesture.location(in: sceneView)
-
+                helper.isDragging = true
                 let location = gesture.location(in: sceneView)
-                let hits = sceneView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
-
-                // Check if we started dragging on a rotation ring
-                var foundRingAxis: String?
-                for hit in hits {
-                    if let axis = PropNodeBuilder.rotationAxis(for: hit.node) {
-                        foundRingAxis = axis
-                        break
-                    }
-                }
-                if let axis = foundRingAxis {
-                    let axisVec = rotationAxisVector(axis, transform: node.simdTransform)
-                    dragMode = .rotateAxis(axisVec)
-                    gizmoNode?.isHidden = true
-                } else {
-                    dragMode = .move
-                }
+                helper.lastDragLocation = location
+                _ = helper.detectDragMode(at: location, in: sceneView, nodeTransform: node.simdTransform)
 
             case .changed:
-                switch dragMode {
+                switch helper.dragMode {
                 case .rotateAxis(let axis):
                     let currentLocation = gesture.location(in: sceneView)
-                    let angle = screenDragToRotationAngle(
-                        from: lastDragLocation, to: currentLocation,
-                        nodePosition: node.simdWorldPosition,
-                        axis: axis, scnView: sceneView
-                    )
-                    lastDragLocation = currentLocation
-
-                    if abs(angle) > 0.0001 {
-                        let rotation = simd_quatf(angle: angle, axis: simd_normalize(axis))
-                        let rotMatrix = simd_float4x4(rotation)
-                        let pos = node.simdTransform.columns.3
-                        var t = node.simdTransform
-                        t.columns.3 = simd_float4(0, 0, 0, 1)
-                        t = simd_mul(rotMatrix, t)
-                        t.columns.3 = pos
-                        node.simdTransform = t
-                    }
+                    helper.applyDragRotation(to: node, axis: axis, currentLocation: currentLocation, scnView: sceneView)
 
                 case .move:
                     let location = gesture.location(in: sceneView)
@@ -395,138 +436,57 @@ struct ARPlaceSceneView: UIViewRepresentable {
                 }
 
             case .ended, .cancelled:
-                isDragging = false
-                suppressTransformSync = true
-                gizmoNode?.isHidden = false
-                let config = ARWorldTrackingConfiguration()
-                config.planeDetection = [.horizontal, .vertical]
-                config.environmentTexturing = .automatic
-                if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
-                    config.frameSemantics.insert(.sceneDepth)
-                }
-                sceneView.session.run(config)
+                helper.endDrag()
                 commitTransform(for: selectedID, from: node)
 
             default: break
             }
         }
 
-        private func commitTransform(for propID: UUID, from node: SCNNode) {
-            let finalTransform = node.simdTransform
-            DispatchQueue.main.async {
-                if let idx = self.parent.placedProps.firstIndex(where: { $0.id == propID }) {
-                    self.parent.placedProps[idx].transform = CodableMatrix4x4(finalTransform)
+        // MARK: - Pinch (scale prop)
+
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard let selectedID = parent.selectedPropID,
+                  let idx = parent.placedProps.firstIndex(where: { $0.id == selectedID }) else { return }
+
+            switch gesture.state {
+            case .began:
+                pinchStartWidth = parent.placedProps[idx].widthMeters
+                pinchStartHeight = parent.placedProps[idx].heightMeters
+
+            case .changed:
+                let scale = Float(gesture.scale)
+                let newW = (pinchStartWidth * scale).clamped(to: 0.05...5.0)
+                let newH = (pinchStartHeight * scale).clamped(to: 0.05...5.0)
+                DispatchQueue.main.async {
+                    self.parent.placedProps[idx].widthMeters = newW
+                    self.parent.placedProps[idx].heightMeters = newH
                 }
-                self.suppressTransformSync = false
+
+            case .ended, .cancelled:
+                impactLight.impactOccurred()
+
+            default: break
             }
         }
 
-        // MARK: - Prop Sync
+        private func commitTransform(for propID: UUID, from node: SCNNode) {
+            helper.commitTransform(for: propID, from: node) { [weak self] (id: UUID, transform: simd_float4x4) in
+                if let idx = self?.parent.placedProps.firstIndex(where: { $0.id == id }) {
+                    self?.parent.placedProps[idx].transform = CodableMatrix4x4(transform)
+                }
+            }
+        }
+
+        // MARK: - Prop Sync (delegates to helper)
 
         func syncProps(_ props: [PlacedProp]) {
             guard let sceneView = sceneView else { return }
-            if isDragging { return }
-
-            let currentIDs = Set(props.map(\.id))
-            let existingIDs = Set(propNodes.keys)
-
-            // Remove deleted
-            for id in existingIDs.subtracting(currentIDs) {
-                propNodes[id]?.removeFromParentNode()
-                propNodes.removeValue(forKey: id)
-            }
-
-            // Update existing
-            for prop in props {
-                if let existingNode = propNodes[prop.id] {
-                    let needsUpdate: Bool
-                    if let box = existingNode.childNode(withName: "propBox", recursively: false)?.geometry as? SCNBox {
-                        needsUpdate = abs(Float(box.width) - prop.widthMeters) > 0.001
-                                   || abs(Float(box.height) - prop.heightMeters) > 0.001
-                                   || abs(Float(box.length) - prop.depthMeters) > 0.001
-                    } else if let plane = existingNode.childNode(withName: "propPlane", recursively: false)?.geometry as? SCNPlane {
-                        needsUpdate = abs(Float(plane.width) - prop.widthMeters) > 0.001
-                                   || abs(Float(plane.height) - prop.heightMeters) > 0.001
-                                   || prop.depthMeters > 0.001
-                    } else {
-                        needsUpdate = false
-                    }
-                    if needsUpdate {
-                        let asset = findAsset(prop.assetID)
-                        if let image = parent.assetStore.loadImage(for: asset) {
-                            PropNodeBuilder.updateNodeSize(existingNode, prop: prop, image: image, assetName: asset.name)
-                        }
-                    }
-                    if !suppressTransformSync {
-                        existingNode.simdTransform = prop.transform.matrix
-                    }
-                }
-            }
-
-            // Add new
-            for prop in props where propNodes[prop.id] == nil {
-                let asset = findAsset(prop.assetID)
-                if let image = parent.assetStore.loadImage(for: asset) {
-                    let node = PropNodeBuilder.makeNode(for: prop, image: image, assetName: asset.name)
-                    sceneView.scene.rootNode.addChildNode(node)
-                    propNodes[prop.id] = node
-                }
-            }
+            helper.syncProps(props, rootNode: sceneView.scene.rootNode, assetStore: parent.assetStore)
         }
-
-        // MARK: - Selection
 
         func updateSelection(_ selectedID: UUID?) {
-            selectionHighlight?.removeFromParentNode()
-            selectionHighlight = nil
-            gizmoNode?.removeFromParentNode()
-            gizmoNode = nil
-
-            guard let selectedID = selectedID,
-                  let node = propNodes[selectedID] else { return }
-
-            let faceWidth: CGFloat
-            let faceHeight: CGFloat
-            if let box = node.childNode(withName: "propBox", recursively: false)?.geometry as? SCNBox {
-                faceWidth = box.width
-                faceHeight = box.height
-            } else if let plane = node.childNode(withName: "propPlane", recursively: false)?.geometry as? SCNPlane {
-                faceWidth = plane.width
-                faceHeight = plane.height
-            } else {
-                return
-            }
-
-            // Yellow highlight outline
-            let outline = SCNPlane(width: faceWidth + 0.02, height: faceHeight + 0.02)
-            let mat = SCNMaterial()
-            mat.diffuse.contents = UIColor.systemYellow.withAlphaComponent(0.6)
-            mat.lightingModel = .constant
-            mat.isDoubleSided = true
-            outline.materials = [mat]
-            let highlightNode = SCNNode(geometry: outline)
-            highlightNode.position = SCNVector3(0, 0, -0.001)
-            node.addChildNode(highlightNode)
-            selectionHighlight = highlightNode
-
-            // 3-axis rotation rings
-            let gizmo = PropNodeBuilder.makeRotationGizmo(faceWidth: faceWidth, faceHeight: faceHeight)
-            node.addChildNode(gizmo)
-            gizmoNode = gizmo
-        }
-
-        /// Maps axis name ("X", "Y", "Z") to the actual world-space axis vector for the given prop transform.
-        private func rotationAxisVector(_ axis: String, transform: simd_float4x4) -> simd_float3 {
-            switch axis {
-            case "X":
-                return simd_float3(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z)
-            case "Y":
-                return simd_float3(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z)
-            case "Z":
-                return simd_float3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)
-            default:
-                return simd_float3(0, 1, 0)
-            }
+            helper.updateSelection(selectedID)
         }
 
         // MARK: - Helpers
@@ -581,40 +541,5 @@ struct ARPlaceSceneView: UIViewRepresentable {
                                 result.worldTransform.columns.2.z)
         }
 
-        private func screenDragToRotationAngle(
-            from startPt: CGPoint, to endPt: CGPoint,
-            nodePosition: simd_float3, axis: simd_float3,
-            scnView: ARSCNView
-        ) -> Float {
-            let center3D = SCNVector3(nodePosition.x, nodePosition.y, nodePosition.z)
-            let axisEnd3D = SCNVector3(nodePosition.x + axis.x, nodePosition.y + axis.y, nodePosition.z + axis.z)
-            let centerScreen = scnView.projectPoint(center3D)
-            let axisEndScreen = scnView.projectPoint(axisEnd3D)
-
-            let axisScreenDir = CGPoint(x: CGFloat(axisEndScreen.x - centerScreen.x),
-                                         y: CGFloat(axisEndScreen.y - centerScreen.y))
-
-            let dragDx = endPt.x - startPt.x
-            let dragDy = endPt.y - startPt.y
-
-            let cross = axisScreenDir.x * dragDy - axisScreenDir.y * dragDx
-
-            let dragMag = sqrt(dragDx * dragDx + dragDy * dragDy)
-            let sign: Float = cross > 0 ? 1.0 : -1.0
-            return sign * Float(dragMag) * 0.005
-        }
-
-        private func findAsset(_ assetID: UUID) -> ImageAsset {
-            parent.assetStore.assets.first { $0.id == assetID } ?? ImageAsset(name: "Missing", filename: "", width: 1, height: 1)
-        }
-
-        private func isDescendant(_ node: SCNNode, of ancestor: SCNNode) -> Bool {
-            var current: SCNNode? = node.parent
-            while let n = current {
-                if n === ancestor { return true }
-                current = n.parent
-            }
-            return false
-        }
     }
 }

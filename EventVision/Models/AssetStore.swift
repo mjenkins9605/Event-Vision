@@ -8,6 +8,7 @@ class AssetStore: ObservableObject {
     private let directory: URL
     private let manifestURL: URL
     private let presetsURL: URL
+    private let imageCache = NSCache<NSUUID, UIImage>()
 
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
@@ -15,6 +16,7 @@ class AssetStore: ObservableObject {
         manifestURL = directory.appendingPathComponent("assets.json")
         presetsURL = directory.appendingPathComponent("presets.json")
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        imageCache.totalCostLimit = 50 * 1024 * 1024 // 50 MB
         loadManifest()
         loadPresets()
     }
@@ -46,9 +48,21 @@ class AssetStore: ObservableObject {
     // MARK: - Load Image
 
     func loadImage(for asset: ImageAsset) -> UIImage? {
+        let key = asset.id as NSUUID
+        if let cached = imageCache.object(forKey: key) {
+            return cached
+        }
         let fileURL = directory.appendingPathComponent(asset.filename)
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return UIImage(data: data)
+        guard let data = try? Data(contentsOf: fileURL),
+              let image = UIImage(data: data) else { return nil }
+        let decodedCost: Int
+        if let cgImage = image.cgImage {
+            decodedCost = cgImage.bytesPerRow * cgImage.height
+        } else {
+            decodedCost = data.count
+        }
+        imageCache.setObject(image, forKey: key, cost: decodedCost)
+        return image
     }
 
     // MARK: - Update
@@ -65,6 +79,7 @@ class AssetStore: ObservableObject {
     func deleteAsset(_ asset: ImageAsset) {
         let fileURL = directory.appendingPathComponent(asset.filename)
         try? FileManager.default.removeItem(at: fileURL)
+        imageCache.removeObject(forKey: asset.id as NSUUID)
         assets.removeAll { $0.id == asset.id }
         saveManifest()
         // Cascade-delete presets for this asset

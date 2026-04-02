@@ -38,3 +38,9 @@ enum MeasurementFormatter {
         return totalInches / 39.3701
     }
 }
+
+extension Float {
+    func clamped(to range: ClosedRange<Float>) -> Float {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
+}

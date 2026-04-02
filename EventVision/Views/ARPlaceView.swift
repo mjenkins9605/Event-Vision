@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 import simd
 
 struct ARPlaceView: View {
     var initialProps: [PlacedProp] = []
+    var existingScanID: UUID?
 
     @EnvironmentObject var assetStore: AssetStore
     @EnvironmentObject var scanStore: ScanStore
@@ -24,6 +26,16 @@ struct ARPlaceView: View {
     @State private var editingWidth: Float = 0.5
     @State private var editingHeight: Float = 0.5
     @State private var editingDepth: Float = 0
+    @State private var showSavePresetAlert = false
+    @State private var presetName = ""
+    @State private var capturedSnapshot: UIImage?
+    @State private var showShareSheet = false
+    @State private var snapshotTrigger = 0
+
+    private var canUpdateExistingScan: Bool {
+        guard let id = existingScanID else { return false }
+        return scanStore.scans.contains { $0.id == id }
+    }
 
     private var selectedProp: PlacedProp? {
         guard let id = selectedPropID else { return nil }
@@ -31,14 +43,7 @@ struct ARPlaceView: View {
     }
 
     private var sizeIsNewPreset: Bool {
-        guard let prop = selectedProp else { return false }
-        let existing = assetStore.presets(for: prop.assetID)
-        let asset = assetStore.assets.first { $0.id == prop.assetID }
-        let defaultW: Float = 0.5
-        let defaultH: Float = (asset != nil) ? defaultW / asset!.aspectRatio : 0.5
-        let matchesDefault = abs(prop.widthMeters - defaultW) < 0.01 && abs(prop.heightMeters - defaultH) < 0.01
-        if matchesDefault { return false }
-        return !existing.contains { abs($0.widthMeters - prop.widthMeters) < 0.01 && abs($0.heightMeters - prop.heightMeters) < 0.01 }
+        selectedProp?.isNewPresetSize(assetStore: assetStore) ?? false
     }
 
     var body: some View {
@@ -49,6 +54,11 @@ struct ARPlaceView: View {
                 placedProps: $placedProps,
                 selectedPropID: $selectedPropID,
                 trackingStatus: $trackingStatus,
+                snapshotTrigger: snapshotTrigger,
+                onSnapshot: { image in
+                    capturedSnapshot = image
+                    showShareSheet = true
+                },
                 selectedAsset: selectedAsset,
                 presetWidth: presetWidth,
                 presetHeight: presetHeight
@@ -133,6 +143,9 @@ struct ARPlaceView: View {
                         showAssetPicker = true
                     }
                     if !placedProps.isEmpty {
+                        arPillButton("Photo", icon: "camera.fill", color: Color.white.opacity(0.3)) {
+                            snapshotTrigger += 1
+                        }
                         arPillButton("Save Layout", icon: "square.and.arrow.down", color: .green) {
                             scanName = ""
                             showSaveAlert = true
@@ -205,20 +218,35 @@ struct ARPlaceView: View {
             .preferredColorScheme(.dark)
         }
         .alert("Save AR Layout", isPresented: $showSaveAlert) {
-            TextField("e.g. Lobby Setup", text: $scanName)
+            if !canUpdateExistingScan {
+                TextField("e.g. Lobby Setup", text: $scanName)
+            }
             Button("Save") {
-                let trimmed = scanName.trimmingCharacters(in: .whitespaces)
-                let name = trimmed.isEmpty ? "Untitled Layout" : trimmed
-                let scan = SavedScan(name: name, placedProps: placedProps)
-                scanStore.save(scan)
-                savedConfirmation = "\u{201C}\(name)\u{201D} saved"
+                if canUpdateExistingScan,
+                   let existingID = existingScanID,
+                   let idx = scanStore.scans.firstIndex(where: { $0.id == existingID }) {
+                    var updated = scanStore.scans[idx]
+                    updated.placedProps = placedProps
+                    scanStore.save(updated)
+                    savedConfirmation = "\u{201C}\(updated.name)\u{201D} updated"
+                } else {
+                    let trimmed = scanName.trimmingCharacters(in: .whitespaces)
+                    let name = trimmed.isEmpty ? "Untitled Layout" : trimmed
+                    let scan = SavedScan(name: name, placedProps: placedProps)
+                    scanStore.save(scan)
+                    savedConfirmation = "\u{201C}\(name)\u{201D} saved"
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     savedConfirmation = nil
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Give this layout a name so you can find it later.")
+            if canUpdateExistingScan {
+                Text("Update the placed props on this scan?")
+            } else {
+                Text("Give this layout a name so you can find it later.")
+            }
         }
         .alert("Save as Preset", isPresented: $showSavePresetAlert) {
             TextField("Preset name", text: $presetName)
@@ -252,30 +280,18 @@ struct ARPlaceView: View {
                     .animation(.easeInOut, value: savedConfirmation)
             }
         }
+        .sheet(isPresented: $showShareSheet) {
+            if let image = capturedSnapshot {
+                ShareSheet(items: [image])
+            }
+        }
     }
 
-    // Missing state for preset alert
-    @State private var showSavePresetAlert = false
-    @State private var presetName = ""
 
     private func duplicateSelectedProp() {
         guard let id = selectedPropID,
               let original = placedProps.first(where: { $0.id == id }) else { return }
-
-        var t = original.transform.matrix
-        let right = simd_float3(t.columns.0.x, t.columns.0.y, t.columns.0.z)
-        let offset = right * (original.widthMeters * 0.6)
-        t.columns.3 += simd_float4(offset, 0)
-
-        let dup = PlacedProp(
-            assetID: original.assetID,
-            transform: CodableMatrix4x4(t),
-            widthMeters: original.widthMeters,
-            heightMeters: original.heightMeters,
-            depthMeters: original.depthMeters,
-            surfaceID: original.surfaceID
-        )
-
+        let dup = original.duplicated()
         placedProps.append(dup)
         selectedPropID = dup.id
     }
@@ -293,4 +309,14 @@ struct ARPlaceView: View {
                 .cornerRadius(20)
         }
     }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

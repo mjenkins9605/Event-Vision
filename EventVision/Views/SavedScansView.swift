@@ -26,15 +26,7 @@ struct PropPlacementView: View {
     }
 
     private var sizeIsNewPreset: Bool {
-        guard let prop = selectedProp else { return false }
-        let existing = assetStore.presets(for: prop.assetID)
-        let asset = assetStore.assets.first { $0.id == prop.assetID }
-        // Check against default size
-        let defaultW: Float = 0.5
-        let defaultH: Float = (asset != nil) ? defaultW / asset!.aspectRatio : 0.5
-        let matchesDefault = abs(prop.widthMeters - defaultW) < 0.01 && abs(prop.heightMeters - defaultH) < 0.01
-        if matchesDefault { return false }
-        return !existing.contains { abs($0.widthMeters - prop.widthMeters) < 0.01 && abs($0.heightMeters - prop.heightMeters) < 0.01 }
+        selectedProp?.isNewPresetSize(assetStore: assetStore) ?? false
     }
 
     var body: some View {
@@ -183,24 +175,24 @@ struct PropPlacementView: View {
             updated.placedProps = placedProps
             scanStore.save(updated)
         }
-        .onChange(of: selectedPropID) { newID in
+        .onChange(of: selectedPropID) { _, newID in
             if let prop = placedProps.first(where: { $0.id == newID }) {
                 editingWidth = prop.widthMeters
                 editingHeight = prop.heightMeters
                 editingDepth = prop.depthMeters
             }
         }
-        .onChange(of: editingWidth) { newVal in
+        .onChange(of: editingWidth) { _, newVal in
             guard let id = selectedPropID,
                   let idx = placedProps.firstIndex(where: { $0.id == id }) else { return }
             placedProps[idx].widthMeters = newVal
         }
-        .onChange(of: editingHeight) { newVal in
+        .onChange(of: editingHeight) { _, newVal in
             guard let id = selectedPropID,
                   let idx = placedProps.firstIndex(where: { $0.id == id }) else { return }
             placedProps[idx].heightMeters = newVal
         }
-        .onChange(of: editingDepth) { newVal in
+        .onChange(of: editingDepth) { _, newVal in
             guard let id = selectedPropID,
                   let idx = placedProps.firstIndex(where: { $0.id == id }) else { return }
             placedProps[idx].depthMeters = newVal
@@ -234,24 +226,9 @@ struct PropPlacementView: View {
     private func duplicateSelectedProp() {
         guard let id = selectedPropID,
               let original = placedProps.first(where: { $0.id == id }) else { return }
-
-        // Offset along the surface's local X (right) axis so they don't overlap
-        var t = original.transform.matrix
-        let right = simd_float3(t.columns.0.x, t.columns.0.y, t.columns.0.z)
-        let offset = right * (original.widthMeters * 0.6)
-        t.columns.3 += simd_float4(offset, 0)
-
-        let offsetDup = PlacedProp(
-            assetID: original.assetID,
-            transform: CodableMatrix4x4(t),
-            widthMeters: original.widthMeters,
-            heightMeters: original.heightMeters,
-            depthMeters: original.depthMeters,
-            surfaceID: original.surfaceID
-        )
-
-        placedProps.append(offsetDup)
-        selectedPropID = offsetDup.id
+        let dup = original.duplicated()
+        placedProps.append(dup)
+        selectedPropID = dup.id
     }
 }
 
@@ -346,6 +323,7 @@ struct SavedScanDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var show3D = true
     @State private var showRoomPlan = false
+    @State private var showMeasurements = false
 
     var body: some View {
         ZStack {
@@ -379,7 +357,7 @@ struct SavedScanDetailView: View {
                         }
 
                         NavigationLink {
-                            ARPlaceView(initialProps: scan.placedProps)
+                            ARPlaceView(initialProps: scan.placedProps, existingScanID: scan.id)
                         } label: {
                             Label("AR View", systemImage: "arkit")
                                 .font(.headline)
@@ -410,7 +388,7 @@ struct SavedScanDetailView: View {
                         }
 
                         Button {
-                            show3D.toggle()
+                            showMeasurements = true
                         } label: {
                             Label("List", systemImage: "list.bullet")
                                 .font(.headline)
@@ -440,7 +418,7 @@ struct SavedScanDetailView: View {
         .navigationTitle(scan.name)
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
-        .sheet(isPresented: Binding(get: { !show3D }, set: { if $0 { show3D = false } else { show3D = true } })) {
+        .sheet(isPresented: $showMeasurements) {
             SavedScanMeasurementsSheet(scan: scan)
         }
         .alert("Delete Scan", isPresented: $showDeleteConfirm) {
