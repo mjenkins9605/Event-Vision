@@ -11,6 +11,7 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
     var isPlacementMode: Bool
     var presetWidth: Float?
     var presetHeight: Float?
+    var interactionMode: PropInteractionHelper.InteractionMode = .move
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -23,6 +24,10 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
         scnView.autoenablesDefaultLighting = true
         scnView.antialiasingMode = .multisampling4X
 
+        // One finger = orbit/rotate, two fingers = pan/move, pinch = zoom
+        scnView.defaultCameraController.interactionMode = .orbitTurntable
+        scnView.defaultCameraController.inertiaEnabled = true
+
         let scene = SCNScene()
         scnView.scene = scene
         context.coordinator.scnView = scnView
@@ -31,14 +36,24 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
         // Build room geometry
         buildRoom(in: scene)
 
+        // Compute room center for better orbit target
+        var center = simd_float3.zero
+        var surfaceCount: Float = 0
+        for wall in scan.walls {
+            center += simd_make_float3(wall.simdTransform.columns.3)
+            surfaceCount += 1
+        }
+        if surfaceCount > 0 { center /= surfaceCount }
+
         // Camera
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
         cameraNode.camera?.fieldOfView = 60
-        cameraNode.position = SCNVector3(0, 5, 5)
-        cameraNode.look(at: SCNVector3(0, 0, 0))
+        cameraNode.position = SCNVector3(center.x, center.y + 5, center.z + 5)
+        cameraNode.look(at: SCNVector3(center.x, center.y, center.z))
         scene.rootNode.addChildNode(cameraNode)
         scnView.pointOfView = cameraNode
+        scnView.defaultCameraController.target = SCNVector3(center.x, center.y, center.z)
 
         // Ambient light
         let ambient = SCNNode()
@@ -65,6 +80,7 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
 
     func updateUIView(_ uiView: SCNView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.helper.interactionMode = interactionMode
         if !context.coordinator.isDragging && !context.coordinator.suppressTransformSync {
             context.coordinator.syncProps(placedProps)
             context.coordinator.updateSelection(selectedPropID)
@@ -94,7 +110,8 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
         let floor = SCNFloor()
         floor.reflectivity = 0
         let floorMat = SCNMaterial()
-        floorMat.diffuse.contents = UIColor.darkGray.withAlphaComponent(0.2)
+        floorMat.diffuse.contents = UIColor.white.withAlphaComponent(0.15)
+        floorMat.lightingModel = .constant
         floor.materials = [floorMat]
         let floorNode = SCNNode(geometry: floor)
         floorNode.position.y = lowestY
@@ -165,6 +182,14 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
         // Move-specific drag state (offline viewer uses unproject, not raycast)
         private var dragStartScreenZ: CGFloat = 0
         private var dragStartWorldPos: simd_float3 = .zero
+
+        // Wall snap state
+        private var snappedWall: SavedSurface?
+        private var preSnapOrientation: simd_float4x4?
+        private let snapDistance: Float = 0.2
+        private let unsnapDistance: Float = 0.35
+        private let snapFeedback = UIImpactFeedbackGenerator(style: .medium)
+        private let unsnapFeedback = UIImpactFeedbackGenerator(style: .light)
 
         var isDragging: Bool { helper.isDragging }
         var suppressTransformSync: Bool { helper.suppressTransformSync }
@@ -259,6 +284,8 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
                 helper.isDragging = true
                 scnView.allowsCameraControl = false
                 helper.lastDragLocation = gesture.location(in: scnView)
+                snappedWall = nil
+                preSnapOrientation = nil
 
                 let location = gesture.location(in: scnView)
                 if helper.detectDragMode(at: location, in: scnView, nodeTransform: node.simdTransform) == nil {
@@ -279,20 +306,73 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
                     let unprojected = scnView.unprojectPoint(SCNVector3(Float(location.x), Float(location.y), Float(dragStartScreenZ)))
                     let newWorldPos = simd_float3(unprojected.x, unprojected.y, unprojected.z)
                     let delta = newWorldPos - dragStartWorldPos
+                    let targetPos = dragStartWorldPos + delta
 
-                    if let idx = parent.placedProps.firstIndex(where: { $0.id == selectedID }) {
-                        var original = parent.placedProps[idx].transform.matrix
-                        original.columns.3 = simd_float4(
-                            dragStartWorldPos.x + delta.x,
-                            dragStartWorldPos.y + delta.y,
-                            dragStartWorldPos.z + delta.z,
-                            1
-                        )
-                        node.simdTransform = original
+                    guard let idx = parent.placedProps.firstIndex(where: { $0.id == selectedID }) else { break }
+                    let prop = parent.placedProps[idx]
+
+                    if let wall = snappedWall {
+                        // Currently snapped — slide along wall or unsnap
+                        let wallNormal = simd_normalize(simd_make_float3(wall.simdTransform.columns.2))
+                        let wallCenter = simd_make_float3(wall.simdTransform.columns.3)
+                        let distToPlane = abs(simd_dot(targetPos - wallCenter, wallNormal))
+
+                        if distToPlane > unsnapDistance {
+                            // Unsnap — restore original orientation
+                            snappedWall = nil
+                            if let preSnap = preSnapOrientation {
+                                var restored = preSnap
+                                restored.columns.3 = simd_float4(targetPos, 1)
+                                node.simdTransform = restored
+                                preSnapOrientation = nil
+                            }
+                            unsnapFeedback.impactOccurred()
+                        } else {
+                            // Slide along wall
+                            let projected = targetPos - simd_dot(targetPos - wallCenter, wallNormal) * wallNormal
+                            var t = wallAlignedOrientation(wallNormal: wallNormal)
+                            t.columns.3 = simd_float4(projected, 1)
+                            node.simdTransform = t
+                        }
+                    } else {
+                        // Not snapped — check proximity to walls
+                        var didSnap = false
+                        for wall in parent.scan.walls {
+                            let wallNormal = simd_normalize(simd_make_float3(wall.simdTransform.columns.2))
+                            let wallCenter = simd_make_float3(wall.simdTransform.columns.3)
+                            let dist = abs(simd_dot(targetPos - wallCenter, wallNormal))
+
+                            if dist < snapDistance && isWithinWallBounds(targetPos, wall: wall, tolerance: 0.3) {
+                                // Snap to this wall
+                                snappedWall = wall
+                                preSnapOrientation = parent.placedProps[idx].transform.matrix
+
+                                let projected = targetPos - simd_dot(targetPos - wallCenter, wallNormal) * wallNormal
+                                let halfDepth = prop.depthMeters / 2
+                                let finalPos = projected + wallNormal * halfDepth
+
+                                var t = wallAlignedOrientation(wallNormal: wallNormal)
+                                t.columns.3 = simd_float4(finalPos, 1)
+                                node.simdTransform = t
+
+                                snapFeedback.impactOccurred()
+                                didSnap = true
+                                break
+                            }
+                        }
+
+                        if !didSnap {
+                            // Free movement (original behavior)
+                            var original = parent.placedProps[idx].transform.matrix
+                            original.columns.3 = simd_float4(targetPos, 1)
+                            node.simdTransform = original
+                        }
                     }
                 }
 
             case .ended, .cancelled:
+                snappedWall = nil
+                preSnapOrientation = nil
                 helper.endDrag()
                 scnView.allowsCameraControl = true
                 commitTransform(for: selectedID, from: node)
@@ -309,6 +389,36 @@ struct InteractiveRoom3DViewer: UIViewRepresentable {
                     self?.parent.placedProps[idx].transform = CodableMatrix4x4(transform)
                 }
             }
+        }
+
+        // MARK: - Wall Snap Helpers
+
+        /// Builds an orientation matrix with the prop facing outward from a wall.
+        private func wallAlignedOrientation(wallNormal: simd_float3) -> simd_float4x4 {
+            let forward = wallNormal
+            let worldUp = simd_float3(0, 1, 0)
+            var right = simd_cross(worldUp, forward)
+            if simd_length(right) < 0.001 {
+                // Wall is horizontal (ceiling/floor)
+                right = simd_cross(simd_float3(0, 0, 1), forward)
+            }
+            right = simd_normalize(right)
+            let up = simd_normalize(simd_cross(forward, right))
+
+            var m = matrix_identity_float4x4
+            m.columns.0 = simd_float4(right, 0)
+            m.columns.1 = simd_float4(up, 0)
+            m.columns.2 = simd_float4(forward, 0)
+            return m
+        }
+
+        /// Checks if a point is within the wall&rsquo;s rectangular bounds (with tolerance).
+        private func isWithinWallBounds(_ point: simd_float3, wall: SavedSurface, tolerance: Float) -> Bool {
+            let inv = simd_inverse(wall.simdTransform)
+            let local = simd_make_float3(inv * simd_float4(point, 1))
+            let halfW = wall.dimensionsX / 2 + tolerance
+            let halfH = wall.dimensionsY / 2 + tolerance
+            return abs(local.x) <= halfW && abs(local.y) <= halfH
         }
 
         // MARK: - Sync & Selection (delegates to helper)

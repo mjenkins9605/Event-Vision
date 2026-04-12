@@ -29,6 +29,7 @@ struct AssetPickerSheet: View {
                             .font(.caption)
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 40)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -82,7 +83,7 @@ struct AssetPickerSheet: View {
                 }
             }
             .background(Color.black)
-            .navigationTitle("Choose Asset")
+            .navigationTitle("Assets")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A dimension input that combines a slider with a tappable feet/inches label.
-/// Tapping the label switches to manual text entry for feet and inches.
+/// Tapping the label opens a larger popup with feet and inches fields.
 struct DimensionSlider: View {
     let label: String
     @Binding var meters: Float
@@ -28,25 +28,34 @@ struct DimensionSlider: View {
             Slider(value: $meters, in: range)
                 .tint(tint)
 
-            if isEditing {
-                manualInput
-            } else {
-                Button {
-                    let parts = MeasurementFormatter.toFeetInches(meters)
-                    feetText = "\(parts.feet)"
-                    inchesText = "\(parts.inches)"
-                    isEditing = true
-                    focusedField = .feet
-                } label: {
-                    Text(displayText)
-                        .font(compact ? .caption : .subheadline)
-                        .monospacedDigit()
-                        .foregroundColor(compact ? .white : .primary)
-                        .frame(width: compact ? 54 : 60, alignment: .trailing)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+            Button {
+                let parts = MeasurementFormatter.toFeetInches(meters)
+                feetText = "\(parts.feet)"
+                inchesText = "\(parts.inches)"
+                isEditing = true
+                focusedField = .feet
+            } label: {
+                Text(displayText)
+                    .font(compact ? .caption : .subheadline)
+                    .monospacedDigit()
+                    .foregroundColor(compact ? .white : .primary)
+                    .frame(width: compact ? 54 : 60, alignment: .trailing)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+        }
+        .overlay {
+            if isEditing {
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture { applyManualInput() }
+            }
+        }
+        .sheet(isPresented: $isEditing) {
+            manualInputSheet
+                .presentationDetents([.height(240)])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
     }
 
@@ -57,41 +66,67 @@ struct DimensionSlider: View {
         return MeasurementFormatter.feetInches(meters)
     }
 
-    private var manualInput: some View {
-        HStack(spacing: 2) {
-            TextField("0", text: $feetText)
-                .keyboardType(.numberPad)
-                .frame(width: 28)
-                .multilineTextAlignment(.trailing)
-                .font(compact ? .caption : .subheadline)
-                .monospacedDigit()
-                .focused($focusedField, equals: .feet)
-            Text("\u{2032}")
-                .font(compact ? .caption : .subheadline)
-                .foregroundColor(.gray)
-            TextField("0", text: $inchesText)
-                .keyboardType(.numberPad)
-                .frame(width: 22)
-                .multilineTextAlignment(.trailing)
-                .font(compact ? .caption : .subheadline)
-                .monospacedDigit()
-                .focused($focusedField, equals: .inches)
-            Text("\"")
-                .font(compact ? .caption : .subheadline)
-                .foregroundColor(.gray)
+    private var manualInputSheet: some View {
+        VStack(spacing: 20) {
+            Text("Set \(label) Dimension")
+                .font(.headline)
+                .padding(.top, 40)
+
+            HStack(spacing: 16) {
+                VStack(spacing: 6) {
+                    Text("Feet")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    TextField("0", text: $feetText)
+                        .keyboardType(.numberPad)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .frame(width: 80, height: 50)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        .focused($focusedField, equals: .feet)
+                }
+
+                Text("\u{2032}")
+                    .font(.title)
+                    .foregroundColor(.gray)
+
+                VStack(spacing: 6) {
+                    Text("Inches")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    TextField("0", text: $inchesText)
+                        .keyboardType(.numberPad)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .frame(width: 80, height: 50)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        .focused($focusedField, equals: .inches)
+                }
+
+                Text("\"")
+                    .font(.title)
+                    .foregroundColor(.gray)
+            }
 
             Button {
                 applyManualInput()
             } label: {
                 Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 44))
                     .foregroundColor(.green)
-                    .font(.system(size: compact ? 14 : 16))
             }
             .buttonStyle(.plain)
+
+            Spacer()
         }
-        .frame(width: compact ? 54 : 60, alignment: .trailing)
-        .onSubmit {
-            applyManualInput()
+        .onAppear {
+            focusedField = .feet
         }
     }
 

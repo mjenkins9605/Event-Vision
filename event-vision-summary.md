@@ -1,9 +1,9 @@
 # Event Vision - Project Summary
 
-**Last updated:** April 1, 2026 (Session 6)
+**Last updated:** April 11, 2026 (Session 7)
 **Platform:** iOS (Swift / SwiftUI)
 **Xcode:** 26.3
-**Tested on:** iPhone 16 (no LiDAR), iPhone 14 Pro Max (LiDAR)
+**Tested on:** iPhone 16 (no LiDAR), iPhone 14 Pro Max (LiDAR), iPhone 8+ (Mom&rsquo;s)
 
 ---
 
@@ -529,12 +529,126 @@ Event-Vision/
 
 ---
 
+## Features Added (Session 7 &mdash; April 11)
+
+### App Icon
+- Custom 1024&times;1024 app icon generated via Python/Pillow
+- Design: dark background, gold AR viewfinder corners with glow, subtle room wireframe perspective, cyan AR dot grid, centered crosshairs, measurement ticks along edges
+- Wired into `Assets.xcassets/AppIcon.appiconset/` with `Contents.json` pointing to `AppIcon.png`
+
+### Move/Rotate Toggle Button
+- **`InteractionMode` enum** (`.move`, `.rotate`) added to `PropInteractionHelper`
+- Toggle button at **top-right** (opposite Home/back button) in both AR and offline placement
+- **Move mode (default):** gizmo rings hidden, pan = translate, ring taps ignored
+- **Rotate mode:** gizmo rings shown, pan on ring = continuous rotation, tap ring = 45&deg; snap, prop body drag blocked
+- Pinch-to-scale works in both modes
+- Modified 5 methods in `PropInteractionHelper`: `updateSelection`, `shouldBeginPan`, `detectDragMode`, `handleRingTap`, `endDrag`
+- State flows: SwiftUI `@State` &rarr; `UIViewRepresentable` parameter &rarr; `updateUIView` pushes to `helper.interactionMode`
+- AR toggle: circular `.ultraThinMaterial` button in ZStack overlay (`ARPlaceView`)
+- Offline toggle: `.toolbar` with `.topBarTrailing` (`PropPlacementView` in `SavedScansView`)
+- SF Symbols: `arrow.triangle.2.circlepath` (rotate icon) / `arrow.up.and.down.and.arrow.left.and.right` (move icon)
+
+### Photo Saves to Camera Roll
+- Photo button now calls `UIImageWriteToSavedPhotosAlbum` directly (was `UIActivityViewController` share sheet)
+- **White camera flash overlay** (150ms `Color.white` fade) fires on capture for unmistakable visual feedback
+- **"Saved to Camera Roll" toast** appears for 2 seconds via existing `savedConfirmation` overlay
+- Removed unused `capturedSnapshot`, `showShareSheet` state and `ShareSheet` struct
+- `NSPhotoLibraryAddUsageDescription` was already in `Info.plist`
+
+### 3D Viewer Improvements
+
+**Whitish floor:**
+- Floor material changed from `UIColor.darkGray.withAlphaComponent(0.2)` to `UIColor.white.withAlphaComponent(0.15)` with `.constant` lighting
+- Applied to both `RoomScanView.Room3DViewer` and `InteractiveRoom3DViewer`
+
+**Dimension labels no longer clipped:**
+- Labels offset 5cm along wall normal (`transform.columns.2 * 0.05`) so they float in front of surfaces
+- `renderingOrder = 100` and `readsFromDepthBuffer = false` ensure labels always render on top of geometry
+- Visible from any angle/zoom without z-fighting or occlusion
+
+**Turntable camera controls:**
+- `defaultCameraController.interactionMode = .orbitTurntable` &mdash; one finger = orbit/rotate, two fingers = pan, pinch = zoom
+- `inertiaEnabled = true` for smooth momentum
+- Orbit target set to computed room center (average of wall transforms) instead of world origin
+- Camera positioned relative to room center for centered initial view
+- Applied to both `RoomScanView.Room3DViewer` and `InteractiveRoom3DViewer`
+
+### Snap-to-Wall (Offline 3D Placement)
+- When dragging a prop within **20cm of a wall plane**, it auto-snaps flush against the wall
+- Prop orientation aligned outward from wall using `wallAlignedOrientation(wallNormal:)` helper
+- **Constrained sliding** along the wall surface while snapped
+- **Unsnap at 35cm** &mdash; restores pre-snap orientation, returns to freehand movement
+- **Hysteresis gap** (20cm snap in / 35cm snap out) prevents jitter
+- **Haptic feedback:** medium impact on snap, light impact on unsnap
+- `isWithinWallBounds` check ensures snapping only near the actual wall area (30cm tolerance)
+- Pre-snap orientation saved and restored on unsnap
+- State tracked per-drag: `snappedWall`, `preSnapOrientation` on the Coordinator
+
+### Button Label Cleanup (Anti-Hyphenation)
+All buttons across the app now have `.lineLimit(1)` and/or `.fixedSize()` to prevent text wrapping and hyphenation.
+
+**Labels shortened:**
+| Before | After | Location |
+|--------|-------|----------|
+| Choose Asset | Asset | PropPlacementView |
+| Duplicate | Copy | PropPlacementView |
+| Remove | Delete | PropPlacementView |
+| Save as Preset | Preset | PropPlacementView |
+| Place Props | Place | SavedScanDetailView |
+| 3D Measured / RoomPlan View | Measured / RoomPlan | SavedScanDetailView, RoomScanView |
+| Start Scan | Scan | RoomScanView |
+| Save Layout | Save | ARPlaceView |
+| Delete Asset | Delete | AssetDetailView |
+| Set Physical Dimensions | Set Dimensions | AssetDetailView |
+| Physical Dimensions (W &times; H &times; D) | Dimensions (W &times; H &times; D) | AssetDetailView |
+| Choose Asset (picker title) | Assets | AssetPickerSheet |
+
+**Multi-line text** (footer descriptions, empty states) uses `.fixedSize(horizontal: false, vertical: true)` to wrap at word boundaries without hyphenating.
+
+### Dimension Slider Popup Sheet
+- Tapping the feet/inches display now opens a **bottom sheet** (`.presentationDetents([.height(240)])`) instead of cramped inline text fields
+- Two large input boxes: **Feet** and **Inches** with `title2` font, centered text, dark background fields (80pt wide, 50pt tall)
+- Large **44pt green checkmark** button to confirm
+- Number pad keyboard auto-opens focused on feet field
+- "Set W/H/D Dimension" title with 40pt top padding (clears the sheet drag indicator)
+- Slider still works for quick rough adjustments &mdash; tap-to-edit for precision
+
+### Asset Detail View &mdash; Stacked Vendor Fields
+- Company / Address / Phone fields changed from **side-by-side** `HStack` (label + text field) to **stacked** `VStack` (label above text field)
+- Labels use `.caption` font in gray, full width for the input field below
+- Eliminates truncation/hyphenation of "Company" label entirely
+
+---
+
+## Files Modified (Session 7)
+
+| File | Changes |
+|------|---------|
+| `Assets.xcassets/AppIcon.appiconset/` | Added `AppIcon.png` (1024&times;1024), updated `Contents.json` |
+| `PropInteractionHelper.swift` | Added `InteractionMode` enum + `interactionMode` property; modified `updateSelection`, `shouldBeginPan`, `detectDragMode`, `handleRingTap`, `endDrag` |
+| `ARPlaceSceneView.swift` | Added `interactionMode` parameter; push mode to helper in `updateUIView` |
+| `ARPlaceView.swift` | Added `interactionMode` state + toggle button; photo saves to camera roll with flash; removed `ShareSheet`; shortened "Save Layout" to "Save"; added `.lineLimit(1)` to status text |
+| `InteractiveRoom3DViewer.swift` | Added `interactionMode` parameter; turntable camera controls; whitish floor; snap-to-wall logic (`snappedWall`, `wallAlignedOrientation`, `isWithinWallBounds`, haptics) |
+| `SavedScansView.swift` | Added `interactionMode` state + toolbar toggle; shortened all button labels; `.lineLimit(1).fixedSize()` on all buttons; stacked status text; `.fixedSize` on empty state text |
+| `RoomScanView.swift` | Turntable camera controls; whitish floor; dimension label offset + `renderingOrder` + `readsFromDepthBuffer`; shortened button labels; `.lineLimit(1).fixedSize()` on all buttons |
+| `DimensionSlider.swift` | Replaced inline manual input with popup sheet (feet/inches boxes, large checkmark, 240pt detent) |
+| `AssetDetailView.swift` | Stacked vendor fields (VStack); shortened labels; `.lineLimit(1).fixedSize()` on section headers/buttons; `.fixedSize(horizontal: false, vertical: true)` on footer text |
+| `AssetPickerSheet.swift` | Nav title shortened to "Assets"; `.fixedSize` on empty state text |
+| `AssetLibraryView.swift` | `.fixedSize(horizontal: false, vertical: true)` on empty state text |
+
+---
+
 ## Known Issues / Incomplete
 
 1. **Non-LiDAR measurement accuracy:** Raycast depth estimation without LiDAR is unreliable for small measurements. Walk mode helps for larger distances.
 2. **One wall missing** from 3D viewer in testing &mdash; possible RoomPlan detection or transform issue.
 3. **No in-app media gallery** for browsing captured photos/videos. Storage is in place at `Documents/EventVision/`.
 4. **SourceKit diagnostics** show cross-file resolution errors in the editor (e.g., "Cannot find type X in scope") but these are false positives &mdash; the full project builds successfully via `xcodebuild`.
+5. **Snap-to-wall is offline only** &mdash; not yet implemented in live AR placement (`ARPlaceSceneView`). AR uses surface raycasting which inherently places flush.
+
+## Current State (Session 7, April 11 2026)
+
+All features compiling and deployed to Mom&rsquo;s iPhone 8+. Session focused on UX polish: move/rotate separation, camera feedback, 3D viewer navigation, snap-to-wall, and comprehensive anti-hyphenation pass across all views. No new models or data structures added beyond the `InteractionMode` enum.
 5. **Pre-Session 4 scans have no USDZ:** Scans saved before Session 4 won&rsquo;t have a `.usdz` file, so the RoomPlan View toggle won&rsquo;t appear. Must rescan to get the USDZ export.
 6. **Rotation rings still hard to grab in some orientations:** The invisible fat hit-test torus helps but some rings can still be tricky depending on camera angle.
 7. **Props on horizontal surfaces may still face wrong direction** in some orientations &mdash; needs device testing.

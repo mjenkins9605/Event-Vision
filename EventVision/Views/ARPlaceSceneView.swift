@@ -13,6 +13,7 @@ struct ARPlaceSceneView: UIViewRepresentable {
     var selectedAsset: ImageAsset?
     var presetWidth: Float?
     var presetHeight: Float?
+    var interactionMode: PropInteractionHelper.InteractionMode = .move
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -71,6 +72,7 @@ struct ARPlaceSceneView: UIViewRepresentable {
 
     func updateUIView(_ uiView: ARSCNView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.helper.interactionMode = interactionMode
         if !context.coordinator.isDragging && !context.coordinator.suppressTransformSync {
             context.coordinator.syncProps(placedProps)
             context.coordinator.updateSelection(selectedPropID)

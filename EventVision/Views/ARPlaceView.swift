@@ -28,9 +28,9 @@ struct ARPlaceView: View {
     @State private var editingDepth: Float = 0
     @State private var showSavePresetAlert = false
     @State private var presetName = ""
-    @State private var capturedSnapshot: UIImage?
-    @State private var showShareSheet = false
     @State private var snapshotTrigger = 0
+    @State private var interactionMode: PropInteractionHelper.InteractionMode = .move
+    @State private var showFlash = false
 
     private var canUpdateExistingScan: Bool {
         guard let id = existingScanID else { return false }
@@ -56,18 +56,57 @@ struct ARPlaceView: View {
                 trackingStatus: $trackingStatus,
                 snapshotTrigger: snapshotTrigger,
                 onSnapshot: { image in
-                    capturedSnapshot = image
-                    showShareSheet = true
+                    UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                    showFlash = true
+                    savedConfirmation = "Saved to Camera Roll"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        showFlash = false
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        savedConfirmation = nil
+                    }
                 },
                 selectedAsset: selectedAsset,
                 presetWidth: presetWidth,
-                presetHeight: presetHeight
+                presetHeight: presetHeight,
+                interactionMode: interactionMode
             )
             .ignoresSafeArea()
+
+            // Camera flash
+            if showFlash {
+                Color.white
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .animation(.easeOut(duration: 0.15), value: showFlash)
+            }
 
             // Crosshair
             if selectedAsset != nil {
                 CrosshairView()
+            }
+
+            // Move/Rotate toggle — top right
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        interactionMode = (interactionMode == .move) ? .rotate : .move
+                    } label: {
+                        Image(systemName: interactionMode == .move
+                              ? "arrow.triangle.2.circlepath"
+                              : "arrow.up.and.down.and.arrow.left.and.right")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.trailing, 16)
+                .padding(.top, 8)
+                Spacer()
             }
 
             VStack {
@@ -77,6 +116,7 @@ struct ARPlaceView: View {
                         Text(trackingStatus)
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .lineLimit(1)
 
                         Button {
                             selectedAsset = nil
@@ -146,7 +186,7 @@ struct ARPlaceView: View {
                         arPillButton("Photo", icon: "camera.fill", color: Color.white.opacity(0.3)) {
                             snapshotTrigger += 1
                         }
-                        arPillButton("Save Layout", icon: "square.and.arrow.down", color: .green) {
+                        arPillButton("Save", icon: "square.and.arrow.down", color: .green) {
                             scanName = ""
                             showSaveAlert = true
                         }
@@ -280,11 +320,6 @@ struct ARPlaceView: View {
                     .animation(.easeInOut, value: savedConfirmation)
             }
         }
-        .sheet(isPresented: $showShareSheet) {
-            if let image = capturedSnapshot {
-                ShareSheet(items: [image])
-            }
-        }
     }
 
 
@@ -311,12 +346,3 @@ struct ARPlaceView: View {
     }
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}

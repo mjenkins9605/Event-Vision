@@ -5,6 +5,9 @@ import simd
 /// (`InteractiveRoom3DViewer.Coordinator`) and the live AR viewer
 /// (`ARPlaceSceneView.Coordinator`).
 class PropInteractionHelper {
+    enum InteractionMode { case move, rotate }
+    var interactionMode: InteractionMode = .move
+
     var propNodes: [UUID: SCNNode] = [:]
     private(set) var selectionHighlight: SCNNode?
     private(set) var gizmoNode: SCNNode?
@@ -118,10 +121,12 @@ class PropInteractionHelper {
         node.addChildNode(highlightNode)
         selectionHighlight = highlightNode
 
-        // 3-axis rotation rings
-        let gizmo = PropNodeBuilder.makeRotationGizmo(faceWidth: faceWidth, faceHeight: faceHeight)
-        node.addChildNode(gizmo)
-        gizmoNode = gizmo
+        // 3-axis rotation rings (only in rotate mode)
+        if interactionMode == .rotate {
+            let gizmo = PropNodeBuilder.makeRotationGizmo(faceWidth: faceWidth, faceHeight: faceHeight)
+            node.addChildNode(gizmo)
+            gizmoNode = gizmo
+        }
     }
 
     // MARK: - Rotation
@@ -216,41 +221,62 @@ class PropInteractionHelper {
     func endDrag() {
         isDragging = false
         suppressTransformSync = true
-        gizmoNode?.isHidden = false
+        if interactionMode == .rotate {
+            gizmoNode?.isHidden = false
+        }
     }
 
     // MARK: - Gesture Helpers
 
     /// Checks whether a pan gesture should begin based on hitting the selected prop or its rotation rings.
+    /// In `.move` mode, only prop body hits are allowed. In `.rotate` mode, only ring hits are allowed.
     func shouldBeginPan(at location: CGPoint, in scnView: SCNView, selectedID: UUID?) -> Bool {
         guard let selectedID = selectedID else { return false }
         let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
-        for hit in hits {
-            if PropNodeBuilder.rotationAxis(for: hit.node) != nil { return true }
-            if let name = hit.node.name, let propID = UUID(uuidString: name), propID == selectedID {
-                return true
+
+        switch interactionMode {
+        case .move:
+            for hit in hits {
+                if PropNodeBuilder.rotationAxis(for: hit.node) != nil { continue }
+                if let name = hit.node.name, let propID = UUID(uuidString: name), propID == selectedID {
+                    return true
+                }
+                if let propNode = propNodes[selectedID], isDescendant(hit.node, of: propNode) {
+                    if PropNodeBuilder.rotationAxis(for: hit.node) != nil { continue }
+                    return true
+                }
             }
-            if let propNode = propNodes[selectedID], isDescendant(hit.node, of: propNode) {
-                return true
+            return false
+
+        case .rotate:
+            for hit in hits {
+                if PropNodeBuilder.rotationAxis(for: hit.node) != nil { return true }
             }
+            return false
         }
-        return false
     }
 
     /// Detects which rotation ring (if any) was hit, and configures drag mode accordingly.
-    /// Returns the ring axis string if found, nil if move mode.
+    /// In `.move` mode, always sets `.move`. In `.rotate` mode, detects which ring was hit.
     func detectDragMode(at location: CGPoint, in scnView: SCNView, nodeTransform: simd_float4x4) -> String? {
-        let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
-        for hit in hits {
-            if let axis = PropNodeBuilder.rotationAxis(for: hit.node) {
-                let axisVec = rotationAxisVector(axis, transform: nodeTransform)
-                dragMode = .rotateAxis(axisVec)
-                gizmoNode?.isHidden = true
-                return axis
+        switch interactionMode {
+        case .move:
+            dragMode = .move
+            return nil
+
+        case .rotate:
+            let hits = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
+            for hit in hits {
+                if let axis = PropNodeBuilder.rotationAxis(for: hit.node) {
+                    let axisVec = rotationAxisVector(axis, transform: nodeTransform)
+                    dragMode = .rotateAxis(axisVec)
+                    gizmoNode?.isHidden = true
+                    return axis
+                }
             }
+            dragMode = .move
+            return nil
         }
-        dragMode = .move
-        return nil
     }
 
     // MARK: - Utility
@@ -286,8 +312,9 @@ class PropInteractionHelper {
     }
 
     /// Checks hit results for a rotation ring tap and applies 45-degree rotation if found.
-    /// Returns true if a ring was hit and rotation applied.
+    /// Returns true if a ring was hit and rotation applied. Only active in `.rotate` mode.
     func handleRingTap(in hits: [SCNHitTestResult], selectedID: UUID?) -> Bool {
+        guard interactionMode == .rotate else { return false }
         guard let selectedID = selectedID,
               let node = propNodes[selectedID] else { return false }
         for hit in hits {

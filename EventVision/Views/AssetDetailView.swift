@@ -46,7 +46,11 @@ struct AssetDetailView: View {
 
             // Physical Dimensions
             Section {
-                Toggle("Set Physical Dimensions", isOn: $hasPhysicalDimensions)
+                Toggle(isOn: $hasPhysicalDimensions) {
+                    Text("Set Dimensions")
+                        .lineLimit(1)
+                        .fixedSize()
+                }
 
                 if hasPhysicalDimensions {
                     VStack(spacing: 12) {
@@ -56,29 +60,31 @@ struct AssetDetailView: View {
                     }
                 }
             } header: {
-                Text("Physical Dimensions (W \u{00D7} H \u{00D7} D)")
+                Text("Dimensions (W \u{00D7} H \u{00D7} D)")
+                    .lineLimit(1).fixedSize()
             } footer: {
-                Text("Width and height set the face size. Depth shows how far it extends from the wall (e.g., step &amp; repeat with carpet).")
+                Text("Width and height set the face size. Depth is how far it extends from the wall.")
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Vendor Info
             Section("Vendor") {
-                HStack {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Company")
+                        .font(.caption)
                         .foregroundColor(.gray)
-                        .frame(width: 80, alignment: .leading)
                     TextField("Vendor name", text: $vendorName)
                 }
-                HStack {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Address")
+                        .font(.caption)
                         .foregroundColor(.gray)
-                        .frame(width: 80, alignment: .leading)
                     TextField("Street, City, State", text: $vendorAddress)
                 }
-                HStack {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Phone")
+                        .font(.caption)
                         .foregroundColor(.gray)
-                        .frame(width: 80, alignment: .leading)
                     TextField("Phone number", text: $vendorPhone)
                         .keyboardType(.phonePad)
                 }
@@ -96,11 +102,13 @@ struct AssetDetailView: View {
                     quotes.append(VendorQuote())
                 } label: {
                     Label("Add Quote", systemImage: "plus.circle")
+                        .lineLimit(1).fixedSize()
                 }
             } header: {
                 Text("Quotes")
             } footer: {
                 Text("Track pricing quotes from vendors. Each quote can have an amount and a note.")
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Notes
@@ -116,8 +124,9 @@ struct AssetDetailView: View {
                 } label: {
                     HStack {
                         Spacer()
-                        Label("Delete Asset", systemImage: "trash")
+                        Label("Delete", systemImage: "trash")
                             .font(.headline)
+                            .lineLimit(1).fixedSize()
                         Spacer()
                     }
                 }
@@ -191,7 +200,7 @@ private struct QuoteRow: View {
                 .buttonStyle(.plain)
             }
 
-            TextField("Note (e.g. bulk discount, rush fee)", text: $quote.note)
+            TextField("Note (e.g. bulk discount)", text: $quote.note)
                 .font(.caption)
                 .foregroundColor(.secondary)
 

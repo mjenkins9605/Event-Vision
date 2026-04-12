@@ -62,9 +62,10 @@ struct LiDARScanView: View {
                                     Button {
                                         show3DView.toggle()
                                     } label: {
-                                        Label(show3DView ? "RoomPlan View" : "3D Measured",
+                                        Label(show3DView ? "RoomPlan" : "Measured",
                                               systemImage: show3DView ? "cube" : "ruler")
                                             .font(.headline)
+                                            .lineLimit(1).fixedSize()
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 12)
                                             .background(Color.blue)
@@ -77,6 +78,7 @@ struct LiDARScanView: View {
                                     } label: {
                                         Label("List", systemImage: "list.bullet")
                                             .font(.headline)
+                                            .lineLimit(1).fixedSize()
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 12)
                                             .background(Color.white.opacity(0.2))
@@ -92,6 +94,7 @@ struct LiDARScanView: View {
                                     } label: {
                                         Label("Save", systemImage: "square.and.arrow.down")
                                             .font(.headline)
+                                            .lineLimit(1).fixedSize()
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 12)
                                             .background(Color.green)
@@ -105,6 +108,7 @@ struct LiDARScanView: View {
                                     } label: {
                                         Label("Rescan", systemImage: "record.circle")
                                             .font(.headline)
+                                            .lineLimit(1).fixedSize()
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 12)
                                             .background(Color.orange)
@@ -118,8 +122,9 @@ struct LiDARScanView: View {
                             Button {
                                 scanner.startScan()
                             } label: {
-                                Label("Start Scan", systemImage: "record.circle")
+                                Label("Scan", systemImage: "record.circle")
                                     .font(.headline)
+                                    .lineLimit(1).fixedSize()
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 12)
                                     .background(Color.blue)
@@ -133,6 +138,7 @@ struct LiDARScanView: View {
                         } label: {
                             Label("Done", systemImage: "checkmark.circle")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 24)
                                 .padding(.vertical, 12)
                                 .background(Color.green)
@@ -245,19 +251,33 @@ struct Room3DViewer: UIViewRepresentable {
         scnView.autoenablesDefaultLighting = true
         scnView.antialiasingMode = .multisampling4X
 
+        // One finger = orbit/rotate, two fingers = pan/move, pinch = zoom
+        scnView.defaultCameraController.interactionMode = .orbitTurntable
+        scnView.defaultCameraController.inertiaEnabled = true
+
         let scene = SCNScene()
         scnView.scene = scene
 
         buildRoom(in: scene)
 
+        // Compute room center for better orbit target
+        var center = simd_float3.zero
+        var count: Float = 0
+        for surface in surfaces {
+            center += simd_make_float3(surface.transform.columns.3)
+            count += 1
+        }
+        if count > 0 { center /= count }
+
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
         cameraNode.camera?.usesOrthographicProjection = false
         cameraNode.camera?.fieldOfView = 60
-        cameraNode.position = SCNVector3(0, 5, 5)
-        cameraNode.look(at: SCNVector3(0, 0, 0))
+        cameraNode.position = SCNVector3(center.x, center.y + 5, center.z + 5)
+        cameraNode.look(at: SCNVector3(center.x, center.y, center.z))
         scene.rootNode.addChildNode(cameraNode)
         scnView.pointOfView = cameraNode
+        scnView.defaultCameraController.target = SCNVector3(center.x, center.y, center.z)
 
         let ambient = SCNNode()
         ambient.light = SCNLight()
@@ -290,7 +310,8 @@ struct Room3DViewer: UIViewRepresentable {
         let floor = SCNFloor()
         floor.reflectivity = 0
         let floorMat = SCNMaterial()
-        floorMat.diffuse.contents = UIColor.darkGray.withAlphaComponent(0.2)
+        floorMat.diffuse.contents = UIColor.white.withAlphaComponent(0.15)
+        floorMat.lightingModel = .constant
         floor.materials = [floorMat]
         let floorNode = SCNNode(geometry: floor)
         floorNode.position.y = lowestY
@@ -324,17 +345,24 @@ struct Room3DViewer: UIViewRepresentable {
         let edge4 = addLine(to: scene, from: bl, to: tl, color: edgeColor)
         for edge in [edge1, edge2, edge3, edge4] { edge.name = "measurementEdge" }
 
-        let topMid = (tl + tr) / 2
+        // Offset labels along the surface normal so they float in front of the wall
+        let normal = simd_make_float3(transform.columns.2) * 0.05
+
+        let topMid = (tl + tr) / 2 + normal
         let widthLabel = PropNodeBuilder.makeImageLabel(text: MeasurementFormatter.feetInches(w), color: edgeColor)
         widthLabel.simdWorldPosition = topMid
         widthLabel.constraints = [SCNBillboardConstraint()]
+        widthLabel.renderingOrder = 100
+        widthLabel.geometry?.firstMaterial?.readsFromDepthBuffer = false
         widthLabel.name = "measurementLabel"
         scene.rootNode.addChildNode(widthLabel)
 
-        let leftMid = (tl + bl) / 2
+        let leftMid = (tl + bl) / 2 + normal
         let heightLabel = PropNodeBuilder.makeImageLabel(text: MeasurementFormatter.feetInches(h), color: edgeColor)
         heightLabel.simdWorldPosition = leftMid
         heightLabel.constraints = [SCNBillboardConstraint()]
+        heightLabel.renderingOrder = 100
+        heightLabel.geometry?.firstMaterial?.readsFromDepthBuffer = false
         heightLabel.name = "measurementLabel"
         scene.rootNode.addChildNode(heightLabel)
     }

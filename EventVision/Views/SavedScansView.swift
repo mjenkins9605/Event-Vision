@@ -19,6 +19,7 @@ struct PropPlacementView: View {
     @State private var presetHeight: Float?
     @State private var showSavePresetAlert = false
     @State private var presetName = ""
+    @State private var interactionMode: PropInteractionHelper.InteractionMode = .move
 
     private var selectedProp: PlacedProp? {
         guard let id = selectedPropID else { return nil }
@@ -39,7 +40,8 @@ struct PropPlacementView: View {
                 selectedAsset: selectedAsset,
                 isPlacementMode: isPlacementMode,
                 presetWidth: presetWidth,
-                presetHeight: presetHeight
+                presetHeight: presetHeight,
+                interactionMode: interactionMode
             )
             .ignoresSafeArea(edges: .bottom)
 
@@ -47,9 +49,10 @@ struct PropPlacementView: View {
                 // Status bar
                 if selectedAsset != nil {
                     HStack(spacing: 10) {
-                        Text("Tap a surface to place \u{201C}\(selectedAsset!.name)\u{201D}")
+                        Text("Tap to place \u{201C}\(selectedAsset!.name)\u{201D}")
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .lineLimit(1)
 
                         Button {
                             selectedAsset = nil
@@ -72,7 +75,7 @@ struct PropPlacementView: View {
                     .cornerRadius(20)
                     .padding(.top, 8)
                 } else {
-                    Text("Choose an asset to start placing")
+                    Text("Choose an asset to place")
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .padding(.horizontal, 16)
@@ -103,8 +106,9 @@ struct PropPlacementView: View {
                     Button {
                         showAssetPicker = true
                     } label: {
-                        Label("Choose Asset", systemImage: "photo.on.rectangle")
+                        Label("Asset", systemImage: "photo.on.rectangle")
                             .font(.headline)
+                            .lineLimit(1).fixedSize()
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(Color.blue)
@@ -116,8 +120,9 @@ struct PropPlacementView: View {
                         Button {
                             duplicateSelectedProp()
                         } label: {
-                            Label("Duplicate", systemImage: "plus.square.on.square")
+                            Label("Copy", systemImage: "plus.square.on.square")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .background(Color.orange.opacity(0.8))
@@ -131,8 +136,9 @@ struct PropPlacementView: View {
                                 selectedPropID = nil
                             }
                         } label: {
-                            Label("Remove", systemImage: "trash")
+                            Label("Delete", systemImage: "trash")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .background(Color.red.opacity(0.8))
@@ -150,8 +156,9 @@ struct PropPlacementView: View {
                         presetName = "\(asset?.name ?? "Asset") (Custom)"
                         showSavePresetAlert = true
                     } label: {
-                        Label("Save as Preset", systemImage: "square.and.arrow.down")
+                        Label("Preset", systemImage: "square.and.arrow.down")
                             .font(.subheadline).fontWeight(.semibold)
+                            .lineLimit(1).fixedSize()
                             .padding(.horizontal, 20)
                             .padding(.vertical, 10)
                             .background(Color.purple.opacity(0.8))
@@ -165,6 +172,19 @@ struct PropPlacementView: View {
         }
         .navigationTitle("Place Props")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    interactionMode = (interactionMode == .move) ? .rotate : .move
+                } label: {
+                    Image(systemName: interactionMode == .move
+                          ? "arrow.triangle.2.circlepath"
+                          : "arrow.up.and.down.and.arrow.left.and.right")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
         .preferredColorScheme(.dark)
         .onAppear {
             placedProps = scan.placedProps
@@ -252,6 +272,7 @@ struct SavedScansView: View {
                         .font(.subheadline)
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 40)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -346,8 +367,9 @@ struct SavedScanDetailView: View {
                         NavigationLink {
                             PropPlacementView(scan: scan)
                         } label: {
-                            Label("Place Props", systemImage: "square.on.square.badge.person.crop")
+                            Label("Place", systemImage: "square.on.square.badge.person.crop")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .frame(maxWidth: .infinity)
@@ -361,6 +383,7 @@ struct SavedScanDetailView: View {
                         } label: {
                             Label("AR View", systemImage: "arkit")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .frame(maxWidth: .infinity)
@@ -376,9 +399,10 @@ struct SavedScanDetailView: View {
                             Button {
                                 showRoomPlan.toggle()
                             } label: {
-                                Label(showRoomPlan ? "3D Measured" : "RoomPlan View",
+                                Label(showRoomPlan ? "Measured" : "RoomPlan",
                                       systemImage: showRoomPlan ? "ruler" : "cube")
                                     .font(.headline)
+                                    .lineLimit(1).fixedSize()
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 12)
                                     .background(Color.blue)
@@ -392,6 +416,7 @@ struct SavedScanDetailView: View {
                         } label: {
                             Label("List", systemImage: "list.bullet")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .background(Color.white.opacity(0.2))
@@ -404,6 +429,7 @@ struct SavedScanDetailView: View {
                         } label: {
                             Label("Delete", systemImage: "trash")
                                 .font(.headline)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .background(Color.red.opacity(0.8))
