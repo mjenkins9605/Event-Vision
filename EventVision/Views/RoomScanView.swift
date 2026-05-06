@@ -158,6 +158,8 @@ struct LiDARScanView: View {
         .onChange(of: scanner.scannedRoom != nil) { _, hasRoom in
             if hasRoom {
                 show3DView = true
+                scanName = ""
+                showSavePrompt = true
             }
         }
         .sheet(isPresented: $showResults) {
